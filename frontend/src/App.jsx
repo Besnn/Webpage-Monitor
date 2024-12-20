@@ -1,7 +1,6 @@
-import React, {useEffect, useState} from 'react'
+import React from 'react'
 
-import {BrowserRouter as Router, Routes, Route, Link, useNavigate} from "react-router-dom"
-import Button from 'react-bootstrap/Button'
+import {BrowserRouter as Router, Routes, Route} from "react-router-dom"
 
 import 'bootstrap/dist/css/bootstrap.css'
 
@@ -10,6 +9,7 @@ import './pages/Home/Home.css'
 
 import Monitor from './pages/Monitor/Monitor.jsx'
 import Login from './pages/Login/Login.jsx'
+import Register from './pages/Register/Register.jsx'
 import './App.css'
 
 import { AuthProvider } from './context/AuthContext'
@@ -21,6 +21,7 @@ function App() {
         <AuthProvider>
           <Routes>
             <Route path='/login' element={ <Login /> } />
+            <Route path='/register' element={ <Register /> } />
             <Route path='/' element={ <ProtectedRoute><Home /></ProtectedRoute> } />
             <Route path='/monitor' element={ <ProtectedRoute><Monitor /></ProtectedRoute> } />
           </Routes>
