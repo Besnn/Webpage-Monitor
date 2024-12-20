@@ -1,0 +1,49 @@
+#center-container {
+    display: flex;
+    flex-direction: column;
+    outline: 1px dotted red;
+    margin: auto;
+    width: 50em;
+}
+
+#searchbox-container {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    outline: 1px solid green;
+}
+
+#searchbox {
+    display: block;
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+    margin-left: 0.2em;
+    margin-right: 0.2em;
+    height: 2em;
+    width: 38em;
+    border: 2px solid;
+    border-radius: 10px;
+    border-color: rgb(80, 80, 80);
+}
+
+#searchbox:focus {
+    outline: none;
+    border-color: grey;
+    box-shadow: 0 0 4px grey;
+}
+
+#searchbox-button {
+    display: block;
+    margin-top: 0.5em;
+    height: 2em;
+    border-radius: 10px;
+}
+
+#frontpage-image {
+    display: block;
+    width: 50%;
+    margin: auto;
+    margin-top: 5%;
+    margin-bottom: 1%;
+    border-radius: 25px;
+}
