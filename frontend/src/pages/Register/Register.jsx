@@ -60,13 +60,14 @@ function Register() {
       // Call backend API for registration
       const response = await fetch(
         import.meta.env.DEV
-          ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL + '/api/auth/register'
-          : import.meta.env.VITE_PRODUCTION_SERVER_URL + '/api/auth/register',
+          ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL + '/api/auth/register/'
+          : import.meta.env.VITE_PRODUCTION_SERVER_URL + '/api/auth/register/',
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({
             username: formData.username,
             email: formData.email,
@@ -77,7 +78,9 @@ function Register() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || 'Registration failed')
+        const msg = errorData.error || errorData.message || 'Registration failed'
+        const detail = errorData.details ? ` (${errorData.details})` : ''
+        throw new Error(msg + detail)
       }
 
       const data = await response.json()

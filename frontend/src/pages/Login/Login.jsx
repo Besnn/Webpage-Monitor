@@ -6,7 +6,7 @@ import './Login.css'
 
 function Login() {
   const location = useLocation()
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState(location.state?.message || '')
@@ -17,20 +17,20 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!username || !password) {
-      setError('Please enter both username and password')
+    if (!email || !password) {
+      setError('Please enter both email and password')
       return
     }
 
     try {
       setError('')
       setLoading(true)
-      // Call the login function from AuthContext
-      await login(username, password)
+      // Call the login function from AuthContext (sends email as the username field)
+      await login(email, password)
       // Redirect to home page after successful login
       navigate('/')
     } catch (err) {
-      setError('Failed to log in. Please check your credentials.')
+      setError(err.message || 'Failed to log in. Please check your credentials.')
       console.error('Login error:', err)
     } finally {
       setLoading(false)
@@ -51,13 +51,13 @@ function Login() {
           {successMessage && <Alert variant="success" className="login-alert" onClose={() => setSuccessMessage('')} dismissible>{successMessage}</Alert>}
           {error && <Alert variant="danger" className="login-alert">{error}</Alert>}
           <Form onSubmit={handleSubmit} className="login-form">
-            <Form.Group className="mb-3" controlId="username">
-              <Form.Label>Username</Form.Label>
+            <Form.Group className="mb-3" controlId="email">
+              <Form.Label>Email</Form.Label>
               <Form.Control
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
                 required
                 autoFocus

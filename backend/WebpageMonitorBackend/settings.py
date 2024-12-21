@@ -26,7 +26,8 @@ SECRET_KEY = "django-insecure-y!b1$Z3#^-#v@d_q&j*z&b^p@b*t*c*w*x*y*z*a*b*c*d*e*f
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# Allow local development hosts.
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
 
 
 # Application definition
@@ -57,10 +58,13 @@ MIDDLEWARE = [
 # Whitelist the origins that are allowed to make cross-site HTTP requests.
 # This is typically your frontend's address.
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8000", # Example for a React app
-    # "http://localhost:5173", # Example for a Vue app
-    # "http://127.0.0.1:5500", # Example for VS Code Live Server
+    "http://localhost:8000",
+    "http://localhost:5173",  # Vite dev server
+    "http://127.0.0.1:5173",
 ]
+
+# Allow cookies/authorization headers to be included in cross-site requests.
+CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = "WebpageMonitorBackend.urls"
 

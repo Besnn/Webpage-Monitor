@@ -64,8 +64,11 @@ export function AuthProvider({ children }) {
       const response = await originalFetch(...args)
       if (response.status === 401) {
         const storedUser = localStorage.getItem('user')
-        if (storedUser) {
-          // Only redirect if the user was supposed to be logged in
+        // Don't treat a 401 on the login endpoint as an expired session —
+        // that would just be wrong credentials entered by the user.
+        const requestUrl = typeof args[0] === 'string' ? args[0] : args[0]?.url ?? ''
+        const isLoginEndpoint = requestUrl.includes('/api/auth/login')
+        if (storedUser && !isLoginEndpoint) {
           handleExpiredSessionRef.current?.()
         }
       }
@@ -81,20 +84,25 @@ export function AuthProvider({ children }) {
     try {
       const response = await fetch(
         import.meta.env.DEV
-          ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL + '/api/auth/login'
-          : import.meta.env.VITE_PRODUCTION_SERVER_URL + '/api/auth/login',
+          ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL + '/api/auth/login/'
+          : import.meta.env.VITE_PRODUCTION_SERVER_URL + '/api/auth/login/',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ username, password }),
         }
       )
 
+      const data = await response.json()
+
       if (!response.ok) {
-        throw new Error('Invalid credentials')
+        // Use the error message from Django if available
+        throw new Error(data.error || 'Invalid credentials')
       }
 
-      const user = await response.json()
+      // Backend returns { message, user: { id, email, full_name, role } }
+      const user = data.user
       const expiresAt = Date.now() + SESSION_DURATION_MS
       setCurrentUser(user)
       localStorage.setItem('user', JSON.stringify(user))
@@ -116,6 +124,7 @@ export function AuthProvider({ children }) {
     login,
     logout,
     isAuthenticated: !!currentUser,
+    isAdmin: currentUser?.role === 'admin',
     isSessionExpired,
     handleExpiredSession,
   }
