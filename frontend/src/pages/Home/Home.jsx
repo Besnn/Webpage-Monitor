@@ -7,19 +7,15 @@ import 'bootstrap/dist/css/bootstrap.css'
 
 import './Home.css'
 
-import { useAuth } from '../../context/AuthContext'
-
 function Home() {
   const navigate = useNavigate()
-  const { currentUser, isAdmin, logout } = useAuth()
 
-  const [server_url,] = useState(import.meta.env.DEV ?
-      import.meta.env.VITE_DEVELOPMENT_SERVER_URL : import.meta.env.VITE_PRODUCTION_SERVER_URL)
-  const [isValidHttpURL, setIsValidHttpURL] = useState(false)
-  const [urlText, setURLText] = useState('')
-  const [buttonText, setButtonText] = useState('Enter valid URL')
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [monitoredSites, setMonitoredSites] = useState([])
+   const [server_url,] = useState(import.meta.env.DEV ?
+       import.meta.env.VITE_DEVELOPMENT_SERVER_URL : import.meta.env.VITE_PRODUCTION_SERVER_URL)
+   const [isValidHttpURL, setIsValidHttpURL] = useState(false)
+   const [urlText, setURLText] = useState('')
+   const [buttonText, setButtonText] = useState('Enter valid URL')
+   const [monitoredSites, setMonitoredSites] = useState([])
 
   useEffect(() => {
     const loadMonitoredSites = async () => {
@@ -115,27 +111,6 @@ function Home() {
     navigate(`/monitor/${siteId}`)
   }
 
-  const toggleMenu = () => {
-    setIsMenuOpen((open) => !open)
-  }
-
-  const handleMenuAction = (action) => {
-    setIsMenuOpen(false)
-    if (action === 'logout') {
-      logout()
-      return
-    }
-    if (action === 'admin') {
-      navigate('/admin')
-      return
-    }
-    if (action === 'monitor') {
-      navigate('/monitor')
-      return
-    }
-    navigate('/')
-  }
-
   const validateURL = (string) => {
     let url
     try {
@@ -152,28 +127,6 @@ function Home() {
 
   return (
         <div className="home-page">
-          <header className="topbar">
-            <div className="brand">Webpage Monitor</div>
-            <div className="topbar-actions">
-              <div className="user-chip">
-                {currentUser?.full_name || currentUser?.email || 'User'}
-              </div>
-              <button type="button" className="menu-button" onClick={toggleMenu} aria-label="Open menu">
-                &#9776;
-              </button>
-              {isMenuOpen && (
-                <div className="menu-dropdown">
-                  <button type="button" onClick={() => handleMenuAction('home')}>Home</button>
-                  <button type="button" onClick={() => handleMenuAction('monitor')}>Monitor</button>
-                  {isAdmin && (
-                    <button type="button" onClick={() => handleMenuAction('admin')}>Admin</button>
-                  )}
-                  <button type="button" onClick={() => handleMenuAction('logout')}>Logout</button>
-                </div>
-              )}
-            </div>
-          </header>
-
           <div id="center-container">
             <div className="intro-text">
               <h1>Monitor websites you care about</h1>
@@ -223,3 +176,4 @@ function Home() {
 }
 
 export default Home
+

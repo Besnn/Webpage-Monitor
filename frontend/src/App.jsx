@@ -16,11 +16,13 @@ import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminRoute from './components/AdminRoute'
 import Admin from './pages/Admin/Admin.jsx'
+import Topbar from './components/Topbar'
 
 function App() {
   return (
       <Router>
         <AuthProvider>
+          <Topbar />
           <Routes>
             <Route path='/login' element={ <Login /> } />
             <Route path='/register' element={ <Register /> } />
