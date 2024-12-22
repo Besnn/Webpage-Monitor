@@ -8,7 +8,6 @@ import 'bootstrap/dist/css/bootstrap.css'
 import './Home.css'
 
 import { useAuth } from '../../context/AuthContext'
-import frontpageImage from '../../assets/webpage_monitor_frontpage.jpeg'
 
 function Home() {
   const navigate = useNavigate()
@@ -65,14 +64,25 @@ function Home() {
         if (import.meta.env.DEV) {
           console.log('Value sent successfully')
         }
+        let createdSiteId
         setMonitoredSites((prev) => {
-          if (prev.some((site) => site.url === urlText)) return prev
-          return [...prev, { id: Date.now(), url: urlText }]
+          const existing = prev.find((site) => site.url === urlText)
+          if (existing) {
+            createdSiteId = existing.id
+            return prev
+          }
+          const next = { id: Date.now(), url: urlText }
+          createdSiteId = next.id
+          return [...prev, next]
         })
         setURLText('')
         setIsValidHttpURL(false)
         setButtonText('Enter valid URL')
-        navigate('/monitor')
+        if (createdSiteId) {
+          navigate(`/monitor/${createdSiteId}`)
+        } else {
+          navigate('/monitor')
+        }
       } else if (import.meta.env.DEV) {
         console.error('Failed to send value:', response.statusText)
       }
@@ -83,11 +93,11 @@ function Home() {
     }
   }
 
-  const handleCardClick = (siteUrl) => {
+  const handleCardClick = (siteId) => {
     if (import.meta.env.DEV) {
-      console.log('Selected site:', siteUrl)
+      console.log('Selected site:', siteId)
     }
-    navigate('/monitor')
+    navigate(`/monitor/${siteId}`)
   }
 
   const toggleMenu = () => {
@@ -146,9 +156,13 @@ function Home() {
           </header>
 
           <div id="center-container">
-            <img id='frontpage-image' src={frontpageImage}
-                 alt='Webpage open on a screen and a blue-collar worker, presumably the one who monitors it'>
-            </img>
+            <div className="intro-text">
+              <h1>Monitor websites you care about</h1>
+              <p>
+                Add the URL of any website you want to monitor. The app builds a dashboard with
+                relevant options and stats so you can keep track of changes over time.
+              </p>
+            </div>
             <div id='searchbox-container'>
               <form onSubmit={handleSubmit}>
                 <input
@@ -158,10 +172,10 @@ function Home() {
                     autoFocus
                 >
                 </input>
+                <Button id='searchbox-button' onClick={(e) => handleSubmit(e)} disabled={!isValidHttpURL}>
+                  {buttonText}
+                </Button>
               </form>
-              <Button id='searchbox-button' onClick={(e) => handleSubmit(e)} disabled={!isValidHttpURL}>
-                {buttonText}
-              </Button>
             </div>
           </div>
 
@@ -176,7 +190,7 @@ function Home() {
                     type="button"
                     key={site.id}
                     className="site-card"
-                    onClick={() => handleCardClick(site.url)}
+                    onClick={() => handleCardClick(site.id)}
                   >
                     <span className="site-label">{site.url}</span>
                     <span className="site-action">View monitor</span>

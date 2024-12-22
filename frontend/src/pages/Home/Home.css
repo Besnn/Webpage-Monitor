@@ -1,16 +1,40 @@
 #center-container {
     display: flex;
     flex-direction: column;
-    outline: 1px dotted red;
     margin: auto;
     width: 50em;
+}
+
+.intro-text {
+    margin: 2.5rem auto 1rem;
+    text-align: center;
+    max-width: 38rem;
+    color: #0b1f3a;
+}
+
+.intro-text h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.intro-text p {
+    margin: 0;
+    color: #5d6b82;
+    font-size: 1rem;
+    line-height: 1.6;
 }
 
 #searchbox-container {
     display: flex;
     flex-direction: row;
     justify-content: center;
-    outline: 1px solid green;
+}
+
+#searchbox-container form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 #searchbox {
@@ -33,19 +57,23 @@
 }
 
 #searchbox-button {
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin-top: 0.5em;
     height: 2em;
     border-radius: 10px;
+    line-height: 1;
+    padding: 0 1.25rem;
 }
 
-#frontpage-image {
-    display: block;
-    width: 50%;
-    margin: auto;
-    margin-top: 5%;
-    margin-bottom: 1%;
-    border-radius: 25px;
+#searchbox-button:disabled {
+    background-color: #cbd5e1;
+    border-color: #cbd5e1;
+    color: #64748b;
+    opacity: 1;
+    cursor: not-allowed;
+    box-shadow: none;
 }
 
 .home-page {
@@ -185,6 +213,15 @@
     #center-container {
         width: 100%;
         padding: 0 1.5rem;
+    }
+
+    .intro-text {
+        margin-top: 2rem;
+        text-align: left;
+    }
+
+    .intro-text h1 {
+        font-size: 1.6rem;
     }
 
     #searchbox {

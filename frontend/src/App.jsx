@@ -25,6 +25,7 @@ function App() {
             <Route path='/login' element={ <Login /> } />
             <Route path='/register' element={ <Register /> } />
             <Route path='/' element={ <ProtectedRoute><Home /></ProtectedRoute> } />
+            <Route path='/monitor/:siteId' element={ <ProtectedRoute><Monitor /></ProtectedRoute> } />
             <Route path='/monitor' element={ <ProtectedRoute><Monitor /></ProtectedRoute> } />
             <Route path='/admin' element={ <AdminRoute><Admin /></AdminRoute> } />
           </Routes>
