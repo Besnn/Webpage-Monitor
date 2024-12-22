@@ -157,6 +157,12 @@ function Monitor() {
   const chartPoints = buildChartPoints(history, chartWidth, chartHeight, chartPadding)
   const chartTicks = buildChartTicks(history)
   const chartTimeLabels = buildTimeAxis(history)
+  const guideLineCount = 3
+
+  const guideLinePositions = Array.from({ length: guideLineCount }, (_, index) => {
+    const step = (chartHeight - chartPadding * 2) / (guideLineCount + 1)
+    return chartPadding + step * (index + 1)
+  })
 
   return (
     <Container className="monitor-page">
@@ -213,6 +219,17 @@ function Monitor() {
                       stroke="#e5e7eb"
                       strokeWidth="1"
                     />
+                    {guideLinePositions.map((yPos) => (
+                      <line
+                        key={`guide-${yPos}`}
+                        x1={chartPadding}
+                        y1={yPos}
+                        x2={chartWidth - chartPadding}
+                        y2={yPos}
+                        stroke="#eef2f7"
+                        strokeWidth="1"
+                      />
+                    ))}
                     <line
                       x1={chartPadding}
                       y1={chartHeight - chartPadding}

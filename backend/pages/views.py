@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -56,7 +57,8 @@ def monitor_site_detail(request, site_id):
         return JsonResponse({'error': 'Site not found'}, status=404)
 
     latest_check = page.checks.order_by('-checked_at').first()
-    checks = page.checks.order_by('-checked_at')[:50]
+    limit = getattr(settings, 'RECENT_CHECKS_LIMIT', 10)
+    checks = page.checks.order_by('-checked_at')[:limit]
 
     check_items = [
         {
