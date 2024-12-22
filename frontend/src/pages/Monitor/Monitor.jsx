@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Container, Row, Col, Table, Badge, Button, Spinner, Alert } from 'react-bootstrap'
+import { Container, Row, Col, Table, Badge, Button, Spinner, Alert, Modal, Form } from 'react-bootstrap'
 import './Monitor.css'
 
 const API_BASE_URL = import.meta.env.DEV
@@ -86,6 +86,13 @@ function Monitor() {
   const [logs, setLogs] = useState([])
   const [summary, setSummary] = useState(null)
   const [history, setHistory] = useState([])
+  const [showSettings, setShowSettings] = useState(false)
+  const [settingsData, setSettingsData] = useState({
+    url: '',
+    checkInterval: 5,
+    notificationsEnabled: false,
+    alertThreshold: 3
+  })
 
   useEffect(() => {
     if (!siteId) {
@@ -102,6 +109,14 @@ function Monitor() {
         setSite(detail.site)
         setSummary(detail.summary)
         setLogs(detail.checks || [])
+
+        // Initialize settings data from site info
+        setSettingsData({
+          url: detail.site.url || '',
+          checkInterval: detail.site.check_interval || 5,
+          notificationsEnabled: detail.site.notifications_enabled || false,
+          alertThreshold: detail.site.alert_threshold || 3
+        })
 
         const historyData = await fetchJson(buildApiUrl(`/api/monitor/${siteId}/history/?hours=24`))
         setHistory(historyData.history || [])
@@ -164,6 +179,43 @@ function Monitor() {
     return chartPadding + step * (index + 1)
   })
 
+  const handleSettingsOpen = () => {
+    setShowSettings(true)
+  }
+
+  const handleSettingsClose = () => {
+    setShowSettings(false)
+  }
+
+  const handleSettingsChange = (field, value) => {
+    setSettingsData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const handleSettingsSave = async () => {
+    try {
+      const response = await fetchJson(buildApiUrl(`/api/monitor/${siteId}/settings/`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsData)
+      })
+
+      // Update the site data with the new settings
+      if (response.site) {
+        setSite(response.site)
+      }
+
+      setShowSettings(false)
+      // Optionally reload the page data to reflect changes
+      window.location.reload()
+    } catch (err) {
+      console.error('Failed to save settings:', err)
+      alert(`Failed to save settings: ${err.message}`)
+    }
+  }
+
   return (
     <Container className="monitor-page">
       <div className="monitor-header">
@@ -171,9 +223,14 @@ function Monitor() {
           <h1>Site Dashboard</h1>
           <div className="monitor-url">{site.url}</div>
         </div>
-        <Button variant="outline-secondary" onClick={() => navigate('/')}>
-          &larr; Back
-        </Button>
+        <div className="monitor-header-actions">
+          <Button variant="outline-primary" onClick={handleSettingsOpen} className="me-2">
+            ⚙️ Settings
+          </Button>
+          <Button variant="outline-secondary" onClick={() => navigate('/')}>
+            &larr; Back
+          </Button>
+        </div>
       </div>
 
       <div className="monitor-stats-grid">
@@ -297,6 +354,97 @@ function Monitor() {
           </tbody>
         </Table>
       </div>
+
+      {/* Settings Modal */}
+      <Modal show={showSettings} onHide={handleSettingsClose} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Site Settings</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form>
+            <Form.Group className="mb-3">
+              <Form.Label>Site URL</Form.Label>
+              <Form.Control
+                type="url"
+                value={settingsData.url}
+                onChange={(e) => handleSettingsChange('url', e.target.value)}
+                placeholder="https://example.com"
+              />
+              <Form.Text className="text-muted">
+                The URL to monitor for uptime and performance.
+              </Form.Text>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Check Interval (minutes)</Form.Label>
+              <Form.Control
+                type="number"
+                min="1"
+                max="60"
+                value={settingsData.checkInterval}
+                onChange={(e) => handleSettingsChange('checkInterval', parseInt(e.target.value) || 5)}
+              />
+              <Form.Text className="text-muted">
+                How often to check the site status (1-60 minutes).
+              </Form.Text>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Check
+                type="checkbox"
+                label="Enable Notifications"
+                checked={settingsData.notificationsEnabled}
+                onChange={(e) => handleSettingsChange('notificationsEnabled', e.target.checked)}
+              />
+              <Form.Text className="text-muted">
+                Receive notifications when the site goes down or comes back up.
+              </Form.Text>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Alert Threshold</Form.Label>
+              <Form.Control
+                type="number"
+                min="1"
+                max="10"
+                value={settingsData.alertThreshold}
+                onChange={(e) => handleSettingsChange('alertThreshold', parseInt(e.target.value) || 3)}
+              />
+              <Form.Text className="text-muted">
+                Number of consecutive failed checks before sending an alert (1-10).
+              </Form.Text>
+            </Form.Group>
+
+            <div className="settings-info-section">
+              <h6>Site Information</h6>
+              <div className="info-row">
+                <span className="info-label">Site ID:</span>
+                <span className="info-value">{site.id}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Created:</span>
+                <span className="info-value">{formatTimestamp(site.created_at)}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Current Status:</span>
+                <span className="info-value">
+                  <Badge bg={summary?.current_status === 'UP' ? 'success' : 'danger'}>
+                    {summary?.current_status || 'Unknown'}
+                  </Badge>
+                </span>
+              </div>
+            </div>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleSettingsClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleSettingsSave}>
+            Save Changes
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   )
 }

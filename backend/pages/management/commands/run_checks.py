@@ -4,6 +4,7 @@ import urllib.error
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from datetime import timedelta
 
 from pages.models import MonitoredPage, MonitoredPageCheck
 
@@ -20,7 +21,7 @@ class Command(BaseCommand):
             "--interval",
             type=int,
             default=DEFAULT_INTERVAL_SECONDS,
-            help="Seconds between check rounds.",
+            help="Seconds between check rounds (how often to scan for sites to check).",
         )
         parser.add_argument(
             "--timeout",
@@ -40,6 +41,8 @@ class Command(BaseCommand):
         run_once = options["once"]
 
         self.stdout.write(self.style.SUCCESS("Starting monitor checks"))
+        self.stdout.write(f"Scan interval: {interval}s (checks sites based on their individual check_interval)")
+
         while True:
             self._run_checks(timeout=timeout)
             if run_once:
@@ -52,7 +55,30 @@ class Command(BaseCommand):
             self.stdout.write("No monitored pages to check.")
             return
 
+        now = timezone.now()
+        checked_count = 0
+
         for page in pages:
+            # Get the last check for this page
+            last_check = page.checks.order_by('-checked_at').first()
+
+            # Determine if we should check this page
+            should_check = False
+            if last_check is None:
+                # Never checked before, check it now
+                should_check = True
+            else:
+                # Check if enough time has passed based on the page's check_interval
+                time_since_last_check = now - last_check.checked_at
+                check_interval_delta = timedelta(minutes=page.check_interval)
+
+                if time_since_last_check >= check_interval_delta:
+                    should_check = True
+
+            if not should_check:
+                continue
+
+            # Perform the check
             started_at = time.perf_counter()
             status_code = None
             is_up = False
@@ -90,7 +116,13 @@ class Command(BaseCommand):
                 message=message,
             )
 
+            checked_count += 1
             self.stdout.write(
-                f"Checked {page.url} -> {status_code or 'ERR'} in {elapsed_ms:.2f}ms"
+                f"Checked {page.url} (interval: {page.check_interval}m) -> {status_code or 'ERR'} in {elapsed_ms:.2f}ms"
             )
+
+        if checked_count == 0:
+            self.stdout.write("No sites due for checking this round.")
+        else:
+            self.stdout.write(self.style.SUCCESS(f"Checked {checked_count} site(s) this round."))
 

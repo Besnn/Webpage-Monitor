@@ -8,6 +8,11 @@ class MonitoredPage(models.Model):
     url = models.URLField(max_length=2048)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Settings fields
+    check_interval = models.IntegerField(default=5, help_text="Check interval in minutes (1-60)")
+    notifications_enabled = models.BooleanField(default=False, help_text="Enable notifications for this site")
+    alert_threshold = models.IntegerField(default=3, help_text="Number of consecutive failures before alerting (1-10)")
+
     class Meta:
         ordering = ['-created_at']
 

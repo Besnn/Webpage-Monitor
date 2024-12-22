@@ -11,6 +11,11 @@
   margin-bottom: 2rem;
 }
 
+.monitor-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .monitor-title h1 {
   margin: 0;
   font-size: 1.8rem;
@@ -178,4 +183,38 @@
 
 .chart-axis-label {
   line-height: 1;
+}
+
+/* Settings Modal Styles */
+.settings-info-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.settings-info-section h6 {
+  margin-bottom: 1rem;
+  color: #495057;
+  font-weight: 600;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-weight: 500;
+  color: #6c757d;
+}
+
+.info-value {
+  color: #212529;
+  font-weight: 500;
 }
