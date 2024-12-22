@@ -1,12 +1,11 @@
-from django.shortcuts import render
-
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.utils import timezone
 
 import json
 
-from .models import MonitoredPage
+from .models import MonitoredPage, MonitoredPageCheck
 
 # Create your views here.
 
@@ -44,3 +43,82 @@ def monitor(request):
         )
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON format'}, status=400)
+
+@require_http_methods(["GET"])
+def monitor_site_detail(request, site_id):
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+
+    try:
+        page = MonitoredPage.objects.get(pk=site_id, user=user)
+    except MonitoredPage.DoesNotExist:
+        return JsonResponse({'error': 'Site not found'}, status=404)
+
+    latest_check = page.checks.order_by('-checked_at').first()
+    checks = page.checks.order_by('-checked_at')[:50]
+
+    check_items = [
+        {
+            'id': str(check.id),
+            'checked_at': check.checked_at.isoformat(),
+            'status_code': check.status_code,
+            'response_time_ms': check.response_time_ms,
+            'is_up': check.is_up,
+            'message': check.message,
+        }
+        for check in checks
+    ]
+
+    summary = {
+        'current_status': 'UP' if latest_check and latest_check.is_up else 'DOWN',
+        'last_checked_at': latest_check.checked_at.isoformat() if latest_check else None,
+        'last_status_code': latest_check.status_code if latest_check else None,
+        'last_response_time_ms': latest_check.response_time_ms if latest_check else None,
+    }
+
+    return JsonResponse(
+        {
+            'site': {
+                'id': str(page.id),
+                'url': page.url,
+                'created_at': page.created_at.isoformat(),
+            },
+            'summary': summary,
+            'checks': check_items,
+        },
+        status=200,
+    )
+
+
+@require_http_methods(["GET"])
+def monitor_site_history(request, site_id):
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+
+    try:
+        page = MonitoredPage.objects.get(pk=site_id, user=user)
+    except MonitoredPage.DoesNotExist:
+        return JsonResponse({'error': 'Site not found'}, status=404)
+
+    hours = request.GET.get('hours')
+    try:
+        hours = int(hours) if hours else 24
+    except ValueError:
+        hours = 24
+
+    since = timezone.now() - timezone.timedelta(hours=hours)
+    checks = page.checks.filter(checked_at__gte=since).order_by('checked_at')
+
+    history_items = [
+        {
+            'checked_at': check.checked_at.isoformat(),
+            'response_time_ms': check.response_time_ms,
+            'status_code': check.status_code,
+            'is_up': check.is_up,
+        }
+        for check in checks
+    ]
+
+    return JsonResponse({'history': history_items}, status=200)

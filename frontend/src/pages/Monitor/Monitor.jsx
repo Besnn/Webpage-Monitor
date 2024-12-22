@@ -1,65 +1,280 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Container, Row, Col, Table, Badge, Button, Spinner, Alert } from 'react-bootstrap'
+import './Monitor.css'
+
+const API_BASE_URL = import.meta.env.DEV
+  ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL
+  : import.meta.env.VITE_PRODUCTION_SERVER_URL
+
+const normalizeBaseUrl = (baseUrl) => {
+  if (!baseUrl) return ''
+  return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+}
+
+const buildApiUrl = (path) => {
+  const normalizedBase = normalizeBaseUrl(API_BASE_URL) || window.location.origin
+  return `${normalizedBase}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+const fetchJson = async (url, options = {}) => {
+  const response = await fetch(url, { credentials: 'include', ...options })
+  let data
+  try {
+    data = await response.json()
+  } catch (error) {
+    data = null
+  }
+
+  if (!response.ok) {
+    const message = data?.error || data?.detail || 'Request failed'
+    throw new Error(message)
+  }
+
+  return data || {}
+}
+
+const formatTimestamp = (value) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '—'
+  }
+  return date.toLocaleString()
+}
+
+const buildChartPoints = (history, width, height, padding) => {
+  if (!history.length) return ''
+  const maxTime = Math.max(...history.map((item) => item.response_time_ms || 0), 1)
+  const minTime = Math.min(...history.map((item) => item.response_time_ms || 0))
+  const range = Math.max(maxTime - minTime, 1)
+  const innerWidth = width - padding * 2
+  const innerHeight = height - padding * 2
+
+  return history
+    .map((item, index) => {
+      const x = padding + (innerWidth * index) / Math.max(history.length - 1, 1)
+      const value = item.response_time_ms || 0
+      const y = padding + innerHeight - ((value - minTime) / range) * innerHeight
+      return `${x},${y}`
+    })
+    .join(' ')
+}
+
+const buildChartTicks = (history) => {
+  if (!history.length) return { min: 0, max: 0 }
+  const maxTime = Math.max(...history.map((item) => item.response_time_ms || 0), 1)
+  const minTime = Math.min(...history.map((item) => item.response_time_ms || 0))
+  return { min: Math.round(minTime), max: Math.round(maxTime) }
+}
+
+const buildTimeAxis = (history) => {
+  if (!history.length) return []
+  const format = (value) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '—'
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  return [format(history[0].checked_at), format(history[history.length - 1].checked_at)]
+}
 
 function Monitor() {
   const { siteId } = useParams()
   const navigate = useNavigate()
   const [site, setSite] = useState(null)
-  const [isLoading, setIsLoading] = useState(Boolean(siteId))
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [logs, setLogs] = useState([])
+  const [summary, setSummary] = useState(null)
+  const [history, setHistory] = useState([])
 
   useEffect(() => {
-    if (!siteId) return
+    if (!siteId) {
+      setIsLoading(false)
+      return
+    }
 
-    const loadSite = async () => {
+    const loadSiteData = async () => {
       try {
-        const response = await fetch(`${import.meta.env.DEV ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL : import.meta.env.VITE_PRODUCTION_SERVER_URL}/monitor`, {
-          credentials: 'include',
-        })
-        if (!response.ok) {
-          setSite(null)
-          return
-        }
-        const data = await response.json()
-        const match = (data.pages || []).find((item) => String(item.id) === String(siteId))
-        setSite(match || null)
-      } catch (error) {
+        setIsLoading(true)
+        setError(null)
+
+        const detail = await fetchJson(buildApiUrl(`/api/monitor/${siteId}/`))
+        setSite(detail.site)
+        setSummary(detail.summary)
+        setLogs(detail.checks || [])
+
+        const historyData = await fetchJson(buildApiUrl(`/api/monitor/${siteId}/history/?hours=24`))
+        setHistory(historyData.history || [])
+      } catch (err) {
+        setError(err.message || 'Failed to load site data')
         setSite(null)
+        setSummary(null)
+        setLogs([])
+        setHistory([])
       } finally {
         setIsLoading(false)
       }
     }
 
-    loadSite()
+    loadSiteData()
   }, [siteId])
 
   if (!siteId) {
-    return <h1>Monitor Page</h1>
+    return (
+      <Container className="monitor-page">
+        <Alert variant="warning">No site ID provided.</Alert>
+        <Button variant="primary" onClick={() => navigate('/')}>Back to Dashboard</Button>
+      </Container>
+    )
   }
 
   if (isLoading) {
     return (
-      <div style={{ padding: '2rem' }}>
-        <h1>Monitor</h1>
-        <p>Loading site details...</p>
-      </div>
+      <Container className="monitor-page text-center" style={{ paddingTop: '4rem' }}>
+        <Spinner animation="border" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </Spinner>
+        <p className="mt-3">Loading site details...</p>
+      </Container>
     )
   }
 
-  if (!site) {
+  if (error || !site) {
     return (
-      <div style={{ padding: '2rem' }}>
-        <h1>Monitor</h1>
-        <p>We could not find that monitored site.</p>
-        <button type="button" onClick={() => navigate('/')}>Back to dashboard</button>
-      </div>
+      <Container className="monitor-page">
+        <Alert variant="danger">
+          <h4>Error</h4>
+          <p>{error || 'Site not found.'}</p>
+        </Alert>
+        <Button variant="secondary" onClick={() => navigate('/')}>Back to Dashboard</Button>
+      </Container>
     )
   }
+
+  const chartWidth = 720
+  const chartHeight = 220
+  const chartPadding = 24
+  const chartPoints = buildChartPoints(history, chartWidth, chartHeight, chartPadding)
+  const chartTicks = buildChartTicks(history)
+  const chartTimeLabels = buildTimeAxis(history)
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h1>Monitoring</h1>
-      <p>{site.url}</p>
-    </div>
+    <Container className="monitor-page">
+      <div className="monitor-header">
+        <div className="monitor-title">
+          <h1>Site Dashboard</h1>
+          <div className="monitor-url">{site.url}</div>
+        </div>
+        <Button variant="outline-secondary" onClick={() => navigate('/')}>
+          &larr; Back
+        </Button>
+      </div>
+
+      <div className="monitor-stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">Current Status</div>
+          <div className={`stat-value ${summary?.current_status === 'UP' ? 'success' : 'danger'}`}>
+            {summary?.current_status || 'Unknown'}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Last Check</div>
+          <div className="stat-value" style={{ fontSize: '1.2rem' }}>
+            {summary?.last_checked_at ? formatTimestamp(summary.last_checked_at) : '—'}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Last Status Code</div>
+          <div className="stat-value">{summary?.last_status_code ?? '—'}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Last Response</div>
+          <div className="stat-value">
+            {summary?.last_response_time_ms ? `${summary.last_response_time_ms}ms` : '—'}
+          </div>
+        </div>
+      </div>
+
+      <Row className="mb-4">
+        <Col>
+          <div className="monitor-chart-section">
+            <h5>Response Time History (24h)</h5>
+            {history.length === 0 ? (
+              <div className="chart-placeholder">No history yet. Run the checker to populate data.</div>
+            ) : (
+              <div className="chart-wrapper">
+                <div className="chart-plot">
+                  <svg width="100%" height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
+                    <line
+                      x1={chartPadding}
+                      y1={chartPadding}
+                      x2={chartWidth - chartPadding}
+                      y2={chartPadding}
+                      stroke="#e5e7eb"
+                      strokeWidth="1"
+                    />
+                    <line
+                      x1={chartPadding}
+                      y1={chartHeight - chartPadding}
+                      x2={chartWidth - chartPadding}
+                      y2={chartHeight - chartPadding}
+                      stroke="#e5e7eb"
+                      strokeWidth="1"
+                    />
+                    <polyline
+                      fill="none"
+                      stroke="#4361ee"
+                      strokeWidth="3"
+                      points={chartPoints}
+                    />
+                    <circle cx={chartPadding} cy={chartHeight - chartPadding} r="3" fill="#4361ee" />
+                  </svg>
+                  <div className="chart-axis" aria-hidden="true">
+                    <span className="chart-axis-label">{chartTicks.max}ms</span>
+                    <span className="chart-axis-label">{chartTicks.min}ms</span>
+                  </div>
+                </div>
+                {chartTimeLabels.length === 2 && (
+                  <div className="chart-time-axis">
+                    <span>{chartTimeLabels[0]}</span>
+                    <span>{chartTimeLabels[1]}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </Col>
+      </Row>
+
+      <div className="monitor-logs-section">
+        <div className="logs-header">Recent Checks</div>
+        <Table responsive hover className="mb-0">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Status</th>
+              <th>Response Time</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.map((log) => (
+              <tr key={log.id}>
+                <td>{formatTimestamp(log.checked_at)}</td>
+                <td>
+                  <Badge bg={log.is_up ? 'success' : 'danger'}>
+                    {log.is_up ? 'UP' : 'DOWN'}
+                  </Badge>
+                  <span className="ms-2 text-muted small">({log.status_code ?? 'ERR'})</span>
+                </td>
+                <td>{log.response_time_ms ? `${log.response_time_ms}ms` : '—'}</td>
+                <td>{log.message || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </div>
+    </Container>
   )
 }
 

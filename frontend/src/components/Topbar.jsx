@@ -49,7 +49,6 @@ function Topbar() {
         {isMenuOpen && (
           <div className="menu-dropdown">
             <button type="button" onClick={() => handleMenuAction('home')}>Home</button>
-            <button type="button" onClick={() => handleMenuAction('monitor')}>Monitor</button>
             {isAdmin && (
               <button type="button" onClick={() => handleMenuAction('admin')}>Admin</button>
             )}
@@ -62,4 +61,3 @@ function Topbar() {
 }
 
 export default Topbar
-
