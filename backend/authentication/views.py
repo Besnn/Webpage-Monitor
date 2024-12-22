@@ -27,23 +27,24 @@ def login_view(request):
     """
     try:
         data = json.loads(request.body)
-        email = (data.get('username') or '').strip()
+        login_field = (data.get('username') or '').strip()
         password = data.get('password') or ''
 
-        if not email or not password:
-            return JsonResponse({'error': 'Username and password are required'}, status=400)
+        if not login_field or not password:
+            return JsonResponse({'error': 'Username or email and password are required'}, status=400)
 
-        # Try email first.
-        try:
-            user_obj = User.objects.get(email__iexact=email)
-            username = user_obj.username
-        except User.DoesNotExist:
-            # Fall back to treating the input as a username.
-            username = email
-
-        user = authenticate(request, username=username, password=password)
+        # First try direct username authentication
+        user = authenticate(request, username=login_field, password=password)
         if user is None:
-            return JsonResponse({'error': 'Invalid username or password'}, status=401)
+            # Fallback to email lookup
+            try:
+                user_by_email = User.objects.get(email__iexact=login_field)
+                user = authenticate(request, username=user_by_email.username, password=password)
+            except User.DoesNotExist:
+                pass  # user remains None
+
+        if user is None:
+            return JsonResponse({'error': 'Invalid username or email or password'}, status=401)
 
         if not user.is_active:
             return JsonResponse({'error': 'This account is disabled'}, status=403)

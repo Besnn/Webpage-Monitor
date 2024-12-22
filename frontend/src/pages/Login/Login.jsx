@@ -6,7 +6,7 @@ import './Login.css'
 
 function Login() {
   const location = useLocation()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState(location.state?.message || '')
@@ -17,16 +17,16 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!email || !password) {
-      setError('Please enter both email and password')
+    if (!username || !password) {
+      setError('Please enter username or email and password')
       return
     }
 
     try {
       setError('')
       setLoading(true)
-      // Call the login function from AuthContext (sends email as the username field)
-      await login(email, password)
+      // Call the login function from AuthContext (sends username or email as the username field)
+      await login(username, password)
       // Redirect to home page after successful login
       navigate('/')
     } catch (err) {
@@ -51,13 +51,13 @@ function Login() {
           {successMessage && <Alert variant="success" className="login-alert" onClose={() => setSuccessMessage('')} dismissible>{successMessage}</Alert>}
           {error && <Alert variant="danger" className="login-alert">{error}</Alert>}
           <Form onSubmit={handleSubmit} className="login-form">
-            <Form.Group className="mb-3" controlId="email">
-              <Form.Label>Email</Form.Label>
+            <Form.Group className="mb-3" controlId="username">
+              <Form.Label>Username or email</Form.Label>
               <Form.Control
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                placeholder="Enter your username or email"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 disabled={loading}
                 required
                 autoFocus

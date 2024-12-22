@@ -55,3 +55,20 @@ class AuthEndpointsTests(TestCase):
         me = self.client.get("/api/auth/me/")
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["user"]["role"], "admin")
+
+    def test_login_with_username(self):
+        User.objects.create_user(username="testuser", email="test@example.com", password="pass123")
+
+        resp = self.client.post(
+            "/api/auth/login/",
+            data=json.dumps({"username": "testuser", "password": "pass123"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["user"]["email"], "test@example.com")
+        self.assertEqual(data["user"]["role"], "user")
+
+        # Verify session works
+        me_resp = self.client.get("/api/auth/me/")
+        self.assertEqual(me_resp.status_code, 200)
