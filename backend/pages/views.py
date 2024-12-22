@@ -6,6 +6,9 @@ from django.utils import timezone
 from datetime import timedelta
 
 import json
+import time
+import urllib.request
+import urllib.error
 
 from .models import MonitoredPage, MonitoredPageCheck
 
@@ -32,6 +35,11 @@ def monitor(request):
             return JsonResponse({'error': 'webpageURL is required'}, status=400)
 
         page, created = MonitoredPage.objects.get_or_create(user=user, url=url)
+
+        # If this is a newly created page, immediately perform a check so the UI has fresh status
+        if created:
+            _perform_single_check(page)
+
         return JsonResponse(
             {
                 'page': {
@@ -45,6 +53,52 @@ def monitor(request):
         )
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON format'}, status=400)
+
+
+def _perform_single_check(page, timeout_seconds: int = 10) -> None:
+    """Perform a single HTTP check for the given MonitoredPage and store the result.
+
+    This mirrors the logic from the periodic checker (management command) but is kept
+    here to trigger an initial check right after a page is added for monitoring.
+    """
+    started_at = time.perf_counter()
+    status_code = None
+    is_up = False
+    message = ""
+
+    try:
+        request = urllib.request.Request(
+            page.url,
+            headers={"User-Agent": "WebpageMonitor/1.0"},
+        )
+        with urllib.request.urlopen(request, timeout=max(1, int(timeout_seconds))) as response:
+            status_code = response.getcode()
+            is_up = 200 <= status_code < 400
+            message = "OK" if is_up else f"Status {status_code}"
+    except urllib.error.HTTPError as exc:
+        status_code = exc.code
+        is_up = False
+        message = f"HTTP {exc.code}"
+    except urllib.error.URLError as exc:
+        status_code = None
+        is_up = False
+        message = f"Error: {getattr(exc, 'reason', exc)}"
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        status_code = None
+        is_up = False
+        message = f"Error: {exc}"
+
+    elapsed_ms = (time.perf_counter() - started_at) * 1000
+
+    # Store the check result
+    MonitoredPageCheck.objects.create(
+        page=page,
+        checked_at=timezone.now(),
+        status_code=status_code,
+        response_time_ms=round(elapsed_ms, 2),
+        is_up=is_up,
+        message=message,
+    )
 
 @require_http_methods(["GET"])
 def monitor_site_detail(request, site_id):
