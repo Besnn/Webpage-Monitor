@@ -10,7 +10,26 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - db/db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db/db.sql:/docker-entrypoint-initdb.d/init.sql
+
+  mocksite:
+    image: nginx:alpine
+    container_name: mocksite
+    ports:
+      - "8080:80"
+      - "443:443"
+    volumes:
+      - ./docker/mocksite/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/mocksite/certs:/etc/nginx/certs:ro
+    restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - mocksite.local
 
 volumes:
   pg_data:
+
+networks:
+  default:
+    name: webpage_monitor_default

@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 import json
+import ssl
 import time
 import urllib.request
 import urllib.error
@@ -72,7 +73,10 @@ def _perform_single_check(page, timeout_seconds: int = 10) -> None:
             page.url,
             headers={"User-Agent": "WebpageMonitor/1.0"},
         )
-        with urllib.request.urlopen(request, timeout=max(1, int(timeout_seconds))) as response:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(request, timeout=max(1, int(timeout_seconds)), context=ctx) as response:
             status_code = response.getcode()
             is_up = 200 <= status_code < 400
             message = "OK" if is_up else f"Status {status_code}"

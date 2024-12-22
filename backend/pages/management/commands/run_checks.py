@@ -1,3 +1,4 @@
+import ssl
 import time
 import urllib.request
 import urllib.error
@@ -89,18 +90,21 @@ class Command(BaseCommand):
                     page.url,
                     headers={"User-Agent": "WebpageMonitor/1.0"},
                 )
-                with urllib.request.urlopen(request, timeout=timeout) as response:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(request, timeout=timeout, context=ctx) as response:
                     status_code = response.getcode()
                     is_up = 200 <= status_code < 400
                     message = "OK" if is_up else f"Status {status_code}"
             except urllib.error.HTTPError as exc:
                 status_code = exc.code
-                is_up = False
+                is_up = 200 <= status_code < 400
                 message = f"HTTP {exc.code}"
             except urllib.error.URLError as exc:
                 status_code = None
                 is_up = False
-                message = f"Error: {exc.reason}"
+                message = f"Error: {getattr(exc, 'reason', exc)}"
             except Exception as exc:  # pragma: no cover - defensive fallback
                 status_code = None
                 is_up = False
@@ -133,4 +137,3 @@ class Command(BaseCommand):
             self.stdout.write("No sites due for checking this round.")
         else:
             self.stdout.write(self.style.SUCCESS(f"Checked {checked_count} site(s) this round."))
-
