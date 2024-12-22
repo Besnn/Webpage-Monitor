@@ -19,18 +19,34 @@ function Home() {
   const [urlText, setURLText] = useState('')
   const [buttonText, setButtonText] = useState('Enter valid URL')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [monitoredSites, setMonitoredSites] = useState(() => {
-    try {
-      const stored = localStorage.getItem('monitoredSites')
-      return stored ? JSON.parse(stored) : []
-    } catch (error) {
-      return []
-    }
-  })
+  const [monitoredSites, setMonitoredSites] = useState([])
 
   useEffect(() => {
-    localStorage.setItem('monitoredSites', JSON.stringify(monitoredSites))
-  }, [monitoredSites])
+    const loadMonitoredSites = async () => {
+      try {
+        const response = await fetch(`${server_url}/monitor`, {
+          credentials: 'include',
+        })
+        if (!response.ok) {
+          if (import.meta.env.DEV) {
+            console.error('Failed to load monitored sites:', response.statusText)
+          }
+          return
+        }
+        const data = await response.json()
+        setMonitoredSites((data.pages || []).map((page) => ({
+          id: page.id,
+          url: page.url,
+        })))
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.error('Error loading monitored sites:', error.message)
+        }
+      }
+    }
+
+    loadMonitoredSites()
+  }, [server_url])
 
   const handleChange = (newValue) => {
     const isValid = validateURL(newValue)
@@ -56,6 +72,7 @@ function Home() {
         headers: {
           'Content-Type': 'application/json',
           },
+        credentials: 'include',
         body: //form data
             JSON.stringify({ webpageURL: urlText })
       })
@@ -64,24 +81,17 @@ function Home() {
         if (import.meta.env.DEV) {
           console.log('Value sent successfully')
         }
-        let createdSiteId
-        setMonitoredSites((prev) => {
-          const existing = prev.find((site) => site.url === urlText)
-          if (existing) {
-            createdSiteId = existing.id
-            return prev
-          }
-          const next = { id: Date.now(), url: urlText }
-          createdSiteId = next.id
-          return [...prev, next]
-        })
-        setURLText('')
-        setIsValidHttpURL(false)
-        setButtonText('Enter valid URL')
-        if (createdSiteId) {
-          navigate(`/monitor/${createdSiteId}`)
-        } else {
-          navigate('/monitor')
+        const data = await response.json()
+        const page = data.page
+        if (page) {
+          setMonitoredSites((prev) => {
+            if (prev.some((site) => String(site.id) === String(page.id))) return prev
+            return [...prev, { id: page.id, url: page.url }]
+          })
+          setURLText('')
+          setIsValidHttpURL(false)
+          setButtonText('Enter valid URL')
+          navigate(`/monitor/${page.id}`)
         }
       } else if (import.meta.env.DEV) {
         console.error('Failed to send value:', response.statusText)
