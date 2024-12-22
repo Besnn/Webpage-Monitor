@@ -13,6 +13,9 @@ class MonitoredPage(models.Model):
     notifications_enabled = models.BooleanField(default=False, help_text="Enable notifications for this site")
     alert_threshold = models.IntegerField(default=3, help_text="Number of consecutive failures before alerting (1-10)")
 
+    # Screenshot settings
+    screenshot_enabled = models.BooleanField(default=False, help_text="Capture a screenshot on each check")
+
     class Meta:
         ordering = ['-created_at']
 
@@ -27,6 +30,14 @@ class MonitoredPageCheck(models.Model):
     response_time_ms = models.FloatField(null=True, blank=True)
     is_up = models.BooleanField(default=False)
     message = models.CharField(max_length=255, blank=True)
+
+    # Screenshot & visual diff fields (paths relative to SCREENSHOTS_DIR)
+    screenshot_path = models.CharField(max_length=512, blank=True, default='')
+    diff_path = models.CharField(max_length=512, blank=True, default='')
+    diff_score = models.FloatField(
+        null=True, blank=True,
+        help_text="Visual change score 0-100. 0 = identical, 100 = completely different.",
+    )
 
     class Meta:
         ordering = ['-checked_at']

@@ -140,6 +140,16 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+# Media files (user-uploaded / generated artefacts)
+MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_URL = "/media/"
+
+# Screenshot artefacts directory (stored on local disk)
+SCREENSHOTS_DIR = BASE_DIR / "screenshots"
+
+# Maximum number of screenshots to retain per monitored page
+MAX_SCREENSHOTS_PER_PAGE = 30
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 

@@ -9,6 +9,7 @@ from datetime import timedelta
 
 from pages.models import MonitoredPage, MonitoredPageCheck
 from pages.notifications import handle_post_check_notification
+from pages.screenshots import capture_screenshot, compute_diff, delete_screenshot_file, cleanup_old_screenshots
 
 
 DEFAULT_TIMEOUT_SECONDS = 10
@@ -112,6 +113,26 @@ class Command(BaseCommand):
 
             elapsed_ms = (time.perf_counter() - started_at) * 1000
 
+            # --- Screenshot capture & visual diff ---
+            screenshot_rel = ""
+            diff_rel = ""
+            diff_score = None
+            if page.screenshot_enabled and is_up:
+                try:
+                    screenshot_rel = capture_screenshot(page.url, page.id)
+                    if screenshot_rel and last_check and last_check.screenshot_path:
+                        diff_rel, diff_score = compute_diff(
+                            last_check.screenshot_path, screenshot_rel, page.id
+                        )
+                        # If nothing changed, discard the new screenshot and
+                        # reuse the previous one so we don't waste disk space.
+                        if diff_score is not None and diff_score == 0:
+                            delete_screenshot_file(screenshot_rel)
+                            screenshot_rel = last_check.screenshot_path
+                            # diff image is not created when score==0
+                except Exception:
+                    pass  # never break the checker
+
             latest = MonitoredPageCheck.objects.create(
                 page=page,
                 checked_at=timezone.now(),
@@ -119,7 +140,17 @@ class Command(BaseCommand):
                 response_time_ms=round(elapsed_ms, 2),
                 is_up=is_up,
                 message=message,
+                screenshot_path=screenshot_rel,
+                diff_path=diff_rel,
+                diff_score=diff_score,
             )
+
+            # Prune old screenshots beyond the retention limit
+            if screenshot_rel:
+                try:
+                    cleanup_old_screenshots(page)
+                except Exception:
+                    pass
 
             # Trigger notifications, if applicable
             try:
@@ -129,8 +160,11 @@ class Command(BaseCommand):
                 pass
 
             checked_count += 1
+            ss_tag = " [+screenshot]" if screenshot_rel else ""
+            diff_tag = f" [diff={diff_score:.1f}%]" if diff_score is not None else ""
             self.stdout.write(
-                f"Checked {page.url} (interval: {page.check_interval}m) -> {status_code or 'ERR'} in {elapsed_ms:.2f}ms"
+                f"Checked {page.url} (interval: {page.check_interval}m) -> "
+                f"{status_code or 'ERR'} in {elapsed_ms:.2f}ms{ss_tag}{diff_tag}"
             )
 
         if checked_count == 0:

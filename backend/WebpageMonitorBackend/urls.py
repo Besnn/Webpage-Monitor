@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from pages.views import homePageView, monitor, monitor_site_detail, monitor_site_history, monitor_site_settings
+from pages.views import homePageView, monitor, monitor_site_detail, monitor_site_history, monitor_site_settings, serve_screenshot
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -26,6 +26,7 @@ urlpatterns = [
     path("api/monitor/<int:site_id>/", monitor_site_detail, name="monitor_site_detail"),
     path("api/monitor/<int:site_id>/history/", monitor_site_history, name="monitor_site_history"),
     path("api/monitor/<int:site_id>/settings/", monitor_site_settings, name="monitor_site_settings"),
+    path("api/screenshots/<path:path>", serve_screenshot, name="serve_screenshot"),
     path("api/auth/", include("authentication.urls")),
     path("api/admin/", include("authentication.admin_urls")),
 ]
