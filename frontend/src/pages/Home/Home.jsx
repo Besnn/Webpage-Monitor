@@ -63,6 +63,11 @@ function Home() {
       return
     }
 
+    let finalUrl = urlText
+    if (!/^https?:\/\//i.test(finalUrl)) {
+      finalUrl = 'https://' + finalUrl
+    }
+
     try {
       /*
       create response with url in body and send it to server at api endpoint monitor
@@ -74,7 +79,7 @@ function Home() {
           },
         credentials: 'include',
         body: //form data
-            JSON.stringify({ webpageURL: urlText })
+            JSON.stringify({ webpageURL: finalUrl })
       })
 
       if (response.ok) {
@@ -136,7 +141,11 @@ function Home() {
     try {
       url = new URL(string)
     } catch (err) {
-      return false
+      try {
+        url = new URL(`https://${string}`)
+      } catch (err2) {
+        return false
+      }
     }
     return url.protocol === "http:" || url.protocol === "https:"
   }
