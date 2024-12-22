@@ -196,6 +196,9 @@ def admin_user_search(request):
                 'email': user.email or '',
                 'full_name': (user.get_full_name() or '').strip(),
                 'monitored_sites_count': user.monitored_sites_count,
+                'is_active': user.is_active,
+                'is_staff': user.is_staff,
+                'date_joined': user.date_joined.isoformat(),
             }
         )
 

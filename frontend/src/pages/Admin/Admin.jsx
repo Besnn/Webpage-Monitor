@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Container, Card, Form, Button, Row, Col, ListGroup, Spinner, Alert, Table } from 'react-bootstrap'
+import { Container, Card, Form, Button, Row, Col, ListGroup, Spinner, Alert, Table, Badge } from 'react-bootstrap'
 import './Admin.css'
 
 const API_BASE_URL = import.meta.env.DEV
@@ -156,7 +156,10 @@ export default function Admin() {
                       active={isActive}
                       onClick={() => handleSelectUser(userId)}
                     >
-                      <div className="admin-user-name">{user.full_name || user.username || 'Unnamed user'}</div>
+                      <div className="d-flex justify-content-between align-items-start">
+                        <div className="admin-user-name">{user.full_name || user.username || 'Unnamed user'}</div>
+                        {user.is_staff && <Badge bg="info" className="ms-2">Admin</Badge>}
+                      </div>
                       <div className="admin-user-meta">
                         <span>{user.email || 'No email'}</span>
                         {user.monitored_sites_count !== undefined && (
@@ -164,6 +167,10 @@ export default function Admin() {
                             {user.monitored_sites_count} sites
                           </span>
                         )}
+                      </div>
+                      <div className="admin-user-meta mt-1">
+                        <small>Joined: {user.date_joined ? new Date(user.date_joined).toLocaleDateString() : 'Unknown'}</small>
+                        {!user.is_active && <Badge bg="secondary">Inactive</Badge>}
                       </div>
                     </ListGroup.Item>
                   )
