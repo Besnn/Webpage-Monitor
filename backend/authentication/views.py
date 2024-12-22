@@ -96,23 +96,17 @@ def register_view(request):
         if User.objects.filter(email__iexact=email).exists():
             return JsonResponse({'error': 'An account with this email already exists'}, status=400)
 
-        # Create a unique username for Django's auth system.
-        base_username = email.split('@')[0] or 'user'
-        username = base_username
-        suffix = 1
-        while User.objects.filter(username__iexact=username).exists():
-            suffix += 1
-            username = f"{base_username}{suffix}"
-
-        first_name = display_name
-        last_name = ''
+        # Use the provided username exactly as the account username.
+        # If it's already taken, return a clear error instead of silently altering it.
+        if User.objects.filter(username__iexact=display_name).exists():
+            return JsonResponse({'error': 'This username is already taken'}, status=400)
 
         user = User.objects.create_user(
-            username=username,
+            username=display_name,
             email=email,
             password=password,
-            first_name=first_name,
-            last_name=last_name,
+            first_name=display_name,
+            last_name='',
         )
         # Ensure normal user by default.
         user.is_staff = False
