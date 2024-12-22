@@ -23,4 +23,5 @@ urlpatterns = [
     path("", homePageView, name="home"),
     path("monitor", monitor, name="monitor"),
     path("api/auth/", include("authentication.urls")),
+    path("api/admin/", include("authentication.admin_urls")),
 ]

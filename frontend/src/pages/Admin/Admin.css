@@ -1,0 +1,84 @@
+.admin-page {
+  margin-top: 24px;
+}
+
+.admin-search-form {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-results {
+  margin-top: 24px;
+}
+
+.admin-section-title {
+  margin-bottom: 12px;
+}
+
+.admin-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.admin-empty {
+  color: #6c757d;
+  font-size: 0.95rem;
+  padding: 8px 0;
+}
+
+.admin-user-list {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.admin-user-list .list-group-item.active {
+  background-color: #f8f9fa;
+  border-color: #dee2e6;
+  color: #212529;
+}
+
+.admin-user-name {
+  font-weight: 600;
+}
+
+.admin-user-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+
+.admin-user-count {
+  font-weight: 500;
+}
+
+.admin-sites {
+  margin-top: 8px;
+}
+
+.admin-sites-table {
+  margin-top: 8px;
+}
+
+@media (max-width: 768px) {
+  .admin-search-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-user-meta {
+    flex-direction: column;
+    gap: 4px;
+  }
+}

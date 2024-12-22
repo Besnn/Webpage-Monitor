@@ -59,6 +59,7 @@ MIDDLEWARE = [
 # This is typically your frontend's address.
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
+    "http://127.0.0.1:8000",
     "http://localhost:5173",  # Vite dev server
     "http://127.0.0.1:5173",
 ]
@@ -142,3 +143,6 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True

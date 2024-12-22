@@ -5,8 +5,12 @@ from django.db import connection, transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.contrib.auth import get_user_model
+from django.db.models import Q, Count
 import json
 import logging
+
+from pages.models import MonitoredPage
 
 logger = logging.getLogger(__name__)
 
@@ -154,3 +158,71 @@ def me_view(request):
         },
         status=200,
     )
+
+
+def _ensure_admin(request):
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+    if not (user.is_staff or user.is_superuser):
+        return JsonResponse({'error': 'Admin access required'}, status=403)
+    return None
+
+
+@require_http_methods(["GET"])
+def admin_user_search(request):
+    """Search users by username or email (admin-only)."""
+    denial = _ensure_admin(request)
+    if denial is not None:
+        return denial
+
+    query = (request.GET.get('query') or '').strip()
+    if not query:
+        return JsonResponse({'users': []}, status=200)
+
+    User = get_user_model()
+    users = (
+        User.objects.filter(Q(username__icontains=query) | Q(email__icontains=query))
+        .annotate(monitored_sites_count=Count('monitored_pages'))
+        .order_by('username')
+    )
+
+    results = []
+    for user in users:
+        results.append(
+            {
+                'id': str(user.id),
+                'username': user.username,
+                'email': user.email or '',
+                'full_name': (user.get_full_name() or '').strip(),
+                'monitored_sites_count': user.monitored_sites_count,
+            }
+        )
+
+    return JsonResponse({'users': results}, status=200)
+
+
+@require_http_methods(["GET"])
+def admin_user_sites(request, user_id):
+    """List monitored sites for a user (admin-only)."""
+    denial = _ensure_admin(request)
+    if denial is not None:
+        return denial
+
+    User = get_user_model()
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+
+    pages = MonitoredPage.objects.filter(user=user).order_by('-created_at')
+    results = [
+        {
+            'id': str(page.id),
+            'url': page.url,
+            'created_at': page.created_at.isoformat(),
+        }
+        for page in pages
+    ]
+
+    return JsonResponse({'sites': results}, status=200)
