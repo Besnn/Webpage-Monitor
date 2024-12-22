@@ -11,6 +11,7 @@ import urllib.request
 import urllib.error
 
 from .models import MonitoredPage, MonitoredPageCheck
+from .notifications import handle_post_check_notification
 
 # Create your views here.
 
@@ -91,7 +92,7 @@ def _perform_single_check(page, timeout_seconds: int = 10) -> None:
     elapsed_ms = (time.perf_counter() - started_at) * 1000
 
     # Store the check result
-    MonitoredPageCheck.objects.create(
+    latest = MonitoredPageCheck.objects.create(
         page=page,
         checked_at=timezone.now(),
         status_code=status_code,
@@ -99,6 +100,11 @@ def _perform_single_check(page, timeout_seconds: int = 10) -> None:
         is_up=is_up,
         message=message,
     )
+    # Fire notification logic (do not let it raise)
+    try:
+        handle_post_check_notification(page, latest)
+    except Exception:
+        pass
 
 @require_http_methods(["GET"])
 def monitor_site_detail(request, site_id):

@@ -7,6 +7,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from pages.models import MonitoredPage, MonitoredPageCheck
+from pages.notifications import handle_post_check_notification
 
 
 DEFAULT_TIMEOUT_SECONDS = 10
@@ -107,7 +108,7 @@ class Command(BaseCommand):
 
             elapsed_ms = (time.perf_counter() - started_at) * 1000
 
-            MonitoredPageCheck.objects.create(
+            latest = MonitoredPageCheck.objects.create(
                 page=page,
                 checked_at=timezone.now(),
                 status_code=status_code,
@@ -115,6 +116,13 @@ class Command(BaseCommand):
                 is_up=is_up,
                 message=message,
             )
+
+            # Trigger notifications, if applicable
+            try:
+                handle_post_check_notification(page, latest)
+            except Exception:
+                # Never allow notification errors to break the loop
+                pass
 
             checked_count += 1
             self.stdout.write(
