@@ -38,7 +38,9 @@ function Topbar() {
 
   return (
     <header className="topbar">
-      <div className="brand">Webpage Monitor</div>
+      <div className="brand" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
+        Webpage Monitor
+      </div>
       <div className="topbar-actions">
         <div className="user-chip">
           {currentUser?.full_name || currentUser?.email || 'User'}

@@ -199,6 +199,12 @@ function Monitor() {
             {summary?.last_response_time_ms ? `${summary.last_response_time_ms}ms` : '—'}
           </div>
         </div>
+        <div className="stat-card">
+          <div className="stat-label">Uptime</div>
+          <div className="stat-value">
+            {typeof summary?.uptime_percent === 'number' ? `${summary.uptime_percent}%` : '—'}
+          </div>
+        </div>
       </div>
 
       <Row className="mb-4">

@@ -3,6 +3,7 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from datetime import timedelta
 
 import json
 
@@ -72,11 +73,17 @@ def monitor_site_detail(request, site_id):
         for check in checks
     ]
 
+    # Calculate uptime percentage from recent checks
+    total_checks = len(check_items)
+    up_checks = sum(1 for check in check_items if check['is_up'])
+    uptime_percent = (up_checks / total_checks * 100) if total_checks > 0 else None
+
     summary = {
         'current_status': 'UP' if latest_check and latest_check.is_up else 'DOWN',
         'last_checked_at': latest_check.checked_at.isoformat() if latest_check else None,
         'last_status_code': latest_check.status_code if latest_check else None,
         'last_response_time_ms': latest_check.response_time_ms if latest_check else None,
+        'uptime_percent': round(uptime_percent, 2) if uptime_percent is not None else None,
     }
 
     return JsonResponse(
@@ -110,7 +117,7 @@ def monitor_site_history(request, site_id):
     except ValueError:
         hours = 24
 
-    since = timezone.now() - timezone.timedelta(hours=hours)
+    since = timezone.now() - timedelta(hours=hours)
     checks = page.checks.filter(checked_at__gte=since).order_by('checked_at')
 
     history_items = [
