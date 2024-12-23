@@ -13,7 +13,7 @@ import urllib.request
 import urllib.error
 
 from .models import MonitoredPage, MonitoredPageCheck
-from .notifications import handle_post_check_notification
+from .notifications import handle_post_check_notification, handle_change_notification
 from .screenshots import capture_screenshot, compute_diff, _screenshots_root, delete_screenshot_file, cleanup_old_screenshots
 
 # Create your views here.
@@ -139,6 +139,12 @@ def _perform_single_check(page, timeout_seconds: int = 10) -> None:
     except Exception:
         pass
 
+    # Fire visual-change notification (do not let it raise)
+    try:
+        handle_change_notification(page, latest)
+    except Exception:
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Helper: build a check dict with optional screenshot URLs
@@ -213,6 +219,11 @@ def monitor_site_detail(request, site_id):
                 'notifications_enabled': page.notifications_enabled,
                 'alert_threshold': page.alert_threshold,
                 'screenshot_enabled': page.screenshot_enabled,
+                'change_notifications_enabled': page.change_notifications_enabled,
+                'region_left_pct': page.region_left_pct,
+                'region_top_pct': page.region_top_pct,
+                'region_width_pct': page.region_width_pct,
+                'region_height_pct': page.region_height_pct,
             },
             'summary': summary,
             'checks': check_items,
@@ -308,6 +319,28 @@ def monitor_site_settings(request, site_id):
     if 'screenshotEnabled' in data:
         page.screenshot_enabled = bool(data['screenshotEnabled'])
 
+    # Update change_notifications_enabled if provided
+    if 'changeNotificationsEnabled' in data:
+        page.change_notifications_enabled = bool(data['changeNotificationsEnabled'])
+
+    # Update region settings if provided
+    region_fields = [
+        ('regionLeftPct', 'region_left_pct'),
+        ('regionTopPct', 'region_top_pct'),
+        ('regionWidthPct', 'region_width_pct'),
+        ('regionHeightPct', 'region_height_pct'),
+    ]
+    for frontend_key, model_attr in region_fields:
+        if frontend_key in data:
+            try:
+                val = float(data[frontend_key])
+                if 0 <= val <= 1:
+                    setattr(page, model_attr, val)
+                else:
+                    return JsonResponse({'error': f'{frontend_key} must be between 0 and 1'}, status=400)
+            except (ValueError, TypeError):
+                return JsonResponse({'error': f'Invalid {frontend_key} value'}, status=400)
+ 
     page.save()
 
     return JsonResponse(
@@ -321,6 +354,11 @@ def monitor_site_settings(request, site_id):
                 'notifications_enabled': page.notifications_enabled,
                 'alert_threshold': page.alert_threshold,
                 'screenshot_enabled': page.screenshot_enabled,
+                'change_notifications_enabled': page.change_notifications_enabled,
+                'region_left_pct': page.region_left_pct,
+                'region_top_pct': page.region_top_pct,
+                'region_width_pct': page.region_width_pct,
+                'region_height_pct': page.region_height_pct,
             },
         },
         status=200,

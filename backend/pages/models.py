@@ -15,6 +15,14 @@ class MonitoredPage(models.Model):
 
     # Screenshot settings
     screenshot_enabled = models.BooleanField(default=False, help_text="Capture a screenshot on each check")
+    change_notifications_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable notifications for visual changes",
+    )
+    region_left_pct = models.FloatField(default=0.0, help_text="Monitored region left position as fraction (0.0-1.0)")
+    region_top_pct = models.FloatField(default=0.0, help_text="Monitored region top position as fraction (0.0-1.0)")
+    region_width_pct = models.FloatField(default=1.0, help_text="Monitored region width as fraction (0.0-1.0)")
+    region_height_pct = models.FloatField(default=1.0, help_text="Monitored region height as fraction (0.0-1.0)")
 
     class Meta:
         ordering = ['-created_at']

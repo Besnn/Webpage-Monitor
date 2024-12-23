@@ -2,6 +2,51 @@ from django.core.mail import send_mail
 from django.conf import settings
 
 
+def handle_change_notification(page, latest_check) -> None:
+    """Send an email when a visual change is detected on the page.
+
+    Only fires when:
+    - change_notifications_enabled is True on the page
+    - screenshot_enabled is True
+    - diff_score is set and > 0 (an actual change was detected)
+    - the user has an email address
+    """
+    try:
+        if not getattr(page, 'change_notifications_enabled', False):
+            return
+        if not getattr(page, 'screenshot_enabled', False):
+            return
+
+        diff_score = getattr(latest_check, 'diff_score', None)
+        if diff_score is None or diff_score <= 0:
+            return
+
+        user = getattr(page, 'user', None)
+        recipient = getattr(user, 'email', None)
+        if not recipient:
+            return
+
+        subject = f"Visual change detected: {page.url}"
+        body_lines = [
+            f"A visual change was detected on your monitored page.",
+            f"",
+            f"URL: {page.url}",
+            f"Time: {latest_check.checked_at.isoformat()}",
+            f"Change score: {diff_score:.1f}% (0 = no change, 100 = completely different)",
+        ]
+        body = "\n".join(body_lines)
+
+        send_mail(
+            subject,
+            body,
+            getattr(settings, 'DEFAULT_FROM_EMAIL', 'webmon@localhost'),
+            [recipient],
+            fail_silently=True,
+        )
+    except Exception:
+        return
+
+
 def _consecutive_failures(page) -> int:
     """Return number of consecutive failed checks for the page (including the latest).
 

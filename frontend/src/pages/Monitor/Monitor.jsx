@@ -186,6 +186,244 @@ function OverlaySlider({ beforeSrc, afterSrc, beforeLabel, afterLabel }) {
   )
 }
 
+/**
+ * RegionSelector — click-and-drag a blue rectangle over a screenshot.
+ * Supports: draw new region, move region, resize via 8 handles.
+ * Region values are 0-1 fractions relative to the image dimensions.
+ */
+function RegionSelector({ screenshotUrl, region, onChange, onSave, onReset }) {
+  const containerRef = useRef(null)
+  const imgRef = useRef(null)
+  const [imgSize, setImgSize] = useState({ w: 0, h: 0 })
+
+  // Interaction mode: null | 'draw' | 'move' | handle name
+  const mode = useRef(null)
+  const startPt = useRef({ x: 0, y: 0 })
+  const startRegion = useRef({ ...region })
+
+  // Measure the rendered image dimensions (may differ from natural)
+  useEffect(() => {
+    const measure = () => {
+      const img = imgRef.current
+      if (!img) return
+      setImgSize({ w: img.clientWidth, h: img.clientHeight })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (imgRef.current) ro.observe(imgRef.current)
+    return () => ro.disconnect()
+  }, [screenshotUrl])
+
+  // Convert mouse position to 0-1 fraction relative to image
+  const toFrac = useCallback((clientX, clientY) => {
+    const img = imgRef.current
+    if (!img) return { fx: 0, fy: 0 }
+    const rect = img.getBoundingClientRect()
+    const fx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    const fy = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    return { fx, fy }
+  }, [])
+
+  const clamp01 = (v) => Math.max(0, Math.min(1, v))
+
+  const onPointerDown = useCallback((e) => {
+    // Ignore if not on the image area
+    const img = imgRef.current
+    if (!img) return
+    const rect = img.getBoundingClientRect()
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return
+
+    e.preventDefault()
+    containerRef.current?.setPointerCapture(e.pointerId)
+    const { fx, fy } = toFrac(e.clientX, e.clientY)
+    startPt.current = { x: fx, y: fy }
+    startRegion.current = { ...region }
+
+    // Check if we're on a handle
+    const handle = e.target.closest('[data-handle]')
+    if (handle) {
+      mode.current = handle.dataset.handle
+      return
+    }
+
+    // Check if inside existing region -> move
+    if (
+      fx >= region.left && fx <= region.left + region.width &&
+      fy >= region.top && fy <= region.top + region.height &&
+      region.width < 1 && region.height < 1
+    ) {
+      mode.current = 'move'
+      return
+    }
+
+    // Otherwise draw a new region
+    mode.current = 'draw'
+    onChange({ left: fx, top: fy, width: 0, height: 0 })
+  }, [region, onChange, toFrac])
+
+  const onPointerMove = useCallback((e) => {
+    if (!mode.current) return
+    e.preventDefault()
+    const { fx, fy } = toFrac(e.clientX, e.clientY)
+    const dx = fx - startPt.current.x
+    const dy = fy - startPt.current.y
+    const sr = startRegion.current
+
+    if (mode.current === 'draw') {
+      const left = Math.min(startPt.current.x, fx)
+      const top = Math.min(startPt.current.y, fy)
+      const width = Math.abs(fx - startPt.current.x)
+      const height = Math.abs(fy - startPt.current.y)
+      onChange({ left: clamp01(left), top: clamp01(top), width: clamp01(width), height: clamp01(height) })
+    } else if (mode.current === 'move') {
+      let newLeft = clamp01(sr.left + dx)
+      let newTop = clamp01(sr.top + dy)
+      if (newLeft + sr.width > 1) newLeft = 1 - sr.width
+      if (newTop + sr.height > 1) newTop = 1 - sr.height
+      onChange({ ...sr, left: newLeft, top: newTop })
+    } else {
+      // Handle resize
+      const h = mode.current
+      let { left, top, width, height } = sr
+
+      if (h.includes('w')) { // west (left edge)
+        const newLeft = clamp01(left + dx)
+        width = clamp01(left + width - newLeft)
+        left = newLeft
+      }
+      if (h.includes('e')) { // east (right edge)
+        width = clamp01(sr.width + dx)
+        if (left + width > 1) width = 1 - left
+      }
+      if (h.includes('n')) { // north (top edge)
+        const newTop = clamp01(top + dy)
+        height = clamp01(top + height - newTop)
+        top = newTop
+      }
+      if (h.includes('s')) { // south (bottom edge)
+        height = clamp01(sr.height + dy)
+        if (top + height > 1) height = 1 - top
+      }
+
+      if (width < 0.01) width = 0.01
+      if (height < 0.01) height = 0.01
+      onChange({ left, top, width, height })
+    }
+  }, [onChange, toFrac])
+
+  const onPointerUp = useCallback((e) => {
+    if (!mode.current) return
+    containerRef.current?.releasePointerCapture(e.pointerId)
+    // If region is tiny after drawing (accidental click), reset to full
+    if (mode.current === 'draw' && region.width < 0.02 && region.height < 0.02) {
+      onChange({ left: 0, top: 0, width: 1, height: 1 })
+    }
+    mode.current = null
+  }, [region, onChange])
+
+  const isFullPage = region.left === 0 && region.top === 0 && region.width === 1 && region.height === 1
+
+  // Region pixel position on the rendered image
+  const rLeft = region.left * imgSize.w
+  const rTop = region.top * imgSize.h
+  const rW = region.width * imgSize.w
+  const rH = region.height * imgSize.h
+
+  // Handle positions (corners + midpoints)
+  const handles = [
+    { name: 'nw', x: 0, y: 0, cursor: 'nwse-resize' },
+    { name: 'n',  x: 0.5, y: 0, cursor: 'ns-resize' },
+    { name: 'ne', x: 1, y: 0, cursor: 'nesw-resize' },
+    { name: 'w',  x: 0, y: 0.5, cursor: 'ew-resize' },
+    { name: 'e',  x: 1, y: 0.5, cursor: 'ew-resize' },
+    { name: 'sw', x: 0, y: 1, cursor: 'nesw-resize' },
+    { name: 's',  x: 0.5, y: 1, cursor: 'ns-resize' },
+    { name: 'se', x: 1, y: 1, cursor: 'nwse-resize' },
+  ]
+
+  return (
+    <div className="region-selector-section">
+      <h5 className="region-selector-title">🎯 Monitored Area</h5>
+      <p className="region-selector-desc">
+        Click and drag on the screenshot to select the region for visual change detection.
+        Drag the box to move it, or drag the handles to resize.
+        {!isFullPage && (
+          <span className="region-selector-info">
+            {' '}— Region: {Math.round(region.left * 100)}%, {Math.round(region.top * 100)}% →{' '}
+            {Math.round(region.width * 100)}% × {Math.round(region.height * 100)}%
+          </span>
+        )}
+      </p>
+
+      <div
+        className="region-selector-container"
+        ref={containerRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+      >
+        <img
+          ref={imgRef}
+          src={screenshotUrl}
+          alt="Screenshot for region selection"
+          className="region-selector-img"
+          draggable={false}
+          onLoad={() => {
+            const img = imgRef.current
+            if (img) setImgSize({ w: img.clientWidth, h: img.clientHeight })
+          }}
+        />
+
+        {/* Dark overlay outside the selected region */}
+        {!isFullPage && imgSize.w > 0 && (
+          <>
+            <div className="region-overlay region-overlay-top" style={{ height: rTop }} />
+            <div className="region-overlay region-overlay-bottom" style={{ top: rTop + rH, height: imgSize.h - rTop - rH }} />
+            <div className="region-overlay region-overlay-left" style={{ top: rTop, height: rH, width: rLeft }} />
+            <div className="region-overlay region-overlay-right" style={{ top: rTop, height: rH, left: rLeft + rW, width: imgSize.w - rLeft - rW }} />
+          </>
+        )}
+
+        {/* Blue selection rectangle */}
+        {!isFullPage && imgSize.w > 0 && (
+          <div
+            className="region-rect"
+            style={{ left: rLeft, top: rTop, width: rW, height: rH }}
+          >
+            {/* Resize handles */}
+            {handles.map(h => (
+              <div
+                key={h.name}
+                data-handle={h.name}
+                className="region-handle"
+                style={{
+                  left: `${h.x * 100}%`,
+                  top: `${h.y * 100}%`,
+                  cursor: h.cursor,
+                }}
+              />
+            ))}
+            {/* Size label inside the rectangle */}
+            <div className="region-rect-label">
+              {Math.round(region.width * 100)}% × {Math.round(region.height * 100)}%
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="region-selector-actions">
+        <Button variant="success" size="sm" onClick={onSave}>
+          💾 Save Region
+        </Button>
+        <Button variant="outline-secondary" size="sm" onClick={onReset}>
+          ↩ Reset to Full Page
+        </Button>
+        {isFullPage && <span className="text-muted small ms-2">Monitoring the full page</span>}
+      </div>
+    </div>
+  )
+}
+
 /** Visual-change sparkline (diff_score over time) */
 function DiffSparkline({ history }) {
   const points = history.filter(h => h.diff_score !== null && h.diff_score !== undefined)
@@ -243,7 +481,10 @@ function Monitor() {
     notificationsEnabled: false,
     alertThreshold: 3,
     screenshotEnabled: false,
+    changeNotificationsEnabled: false,
   })
+
+  const [region, setRegion] = useState({left: 0, top: 0, width: 1, height: 1});
 
   // Screenshot viewer state
   const [screenshotTab, setScreenshotTab] = useState('latest')
@@ -273,6 +514,7 @@ function Monitor() {
         notificationsEnabled: detail.site.notifications_enabled || false,
         alertThreshold: detail.site.alert_threshold || 3,
         screenshotEnabled: detail.site.screenshot_enabled || false,
+        changeNotificationsEnabled: detail.site.change_notifications_enabled || false,
       })
 
       const historyData = await fetchJson(buildApiUrl(`/api/monitor/${siteId}/history/?hours=24`))
@@ -296,6 +538,17 @@ function Monitor() {
     const timer = setInterval(() => loadSiteData(false), POLL_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [siteId, loadSiteData])
+
+  useEffect(() => {
+    if (site) {
+      setRegion({
+        left: site.region_left_pct || 0,
+        top: site.region_top_pct || 0,
+        width: site.region_width_pct || 1,
+        height: site.region_height_pct || 1,
+      });
+    }
+  }, [site]);
 
   /* ---- early returns ---- */
   if (!siteId) {
@@ -357,6 +610,26 @@ function Monitor() {
       alert(`Failed to save settings: ${err.message}`)
     }
   }
+
+  const resetRegion = () => setRegion({left: 0, top: 0, width: 1, height: 1});
+
+  const saveRegion = async () => {
+    try {
+      await fetchJson(buildApiUrl(`/api/monitor/${siteId}/settings/`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          regionLeftPct: region.left,
+          regionTopPct: region.top,
+          regionWidthPct: region.width,
+          regionHeightPct: region.height,
+        }),
+      });
+      loadSiteData();
+    } catch (err) {
+      alert('Failed to save region: ' + err.message);
+    }
+  };
 
   /* ---- screenshot data ---- */
   const hasScreenshot = !!summary?.last_screenshot_url
@@ -559,8 +832,7 @@ function Monitor() {
                   )}
 
                   {/* --- Thumbnail gallery --- */}
-                  {screenshotLogs.length > 0 && (
-                    <div className="screenshot-gallery">
+                  {screenshotLogs.length > 0 && <div className="screenshot-gallery">
                       <div className="screenshot-gallery-label">Recent screenshots</div>
                       <div className="screenshot-gallery-strip">
                         {screenshotLogs.map((log, idx) => (
@@ -576,19 +848,27 @@ function Monitor() {
                               className="screenshot-thumb"
                             />
                             <span className="screenshot-thumb-time">{formatTime(log.checked_at)}</span>
-                            {log.diff_score !== null && log.diff_score !== undefined && (
-                              <span className={`screenshot-thumb-dot ${log.diff_score > 10 ? 'red' : log.diff_score > 0 ? 'yellow' : 'green'}`} />
-                            )}
+                            {log.diff_score !== null && log.diff_score !== undefined && <span className={`screenshot-thumb-dot ${log.diff_score > 10 ? 'red' : log.diff_score > 0 ? 'yellow' : 'green'}`} /> }
                           </button>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    </div>}
 
                   {/* --- Visual-change sparkline --- */}
                   <DiffSparkline history={history} />
                 </div>
+
               )}
+                {/* --- Monitored Region Selector --- */}
+                {site?.screenshot_enabled && summary?.last_screenshot_url && (
+                  <RegionSelector
+                    screenshotUrl={buildApiUrl(summary.last_screenshot_url)}
+                    region={region}
+                    onChange={setRegion}
+                    onSave={saveRegion}
+                    onReset={resetRegion}
+                  />
+                )}
             </div>
           </Col>
         </Row>
@@ -753,6 +1033,21 @@ function Monitor() {
               <Form.Check type="checkbox" label="Enable Screenshots" checked={settingsData.screenshotEnabled} onChange={(e) => handleSettingsChange('screenshotEnabled', e.target.checked)} />
               <Form.Text className="text-muted">
                 Capture a full-page screenshot on each check and detect visual changes between consecutive checks. Screenshots are stored locally.
+              </Form.Text>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Check
+                type="checkbox"
+                label="Notify me when a visual change is detected"
+                checked={settingsData.changeNotificationsEnabled}
+                disabled={!settingsData.screenshotEnabled}
+                onChange={(e) => handleSettingsChange('changeNotificationsEnabled', e.target.checked)}
+              />
+              <Form.Text className="text-muted">
+                {settingsData.screenshotEnabled
+                  ? 'Send an email when the visual diff score is greater than 0 (any change detected).'
+                  : 'Enable screenshots first to use visual change notifications.'}
               </Form.Text>
             </Form.Group>
 

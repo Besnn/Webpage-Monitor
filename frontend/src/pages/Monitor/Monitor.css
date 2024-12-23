@@ -620,3 +620,126 @@
   }
 }
 
+/* =============================================
+   Region Selector (mouse-drawn blue rectangle)
+   ============================================= */
+
+.region-selector-section {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #eee;
+}
+
+.region-selector-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+}
+
+.region-selector-desc {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin-bottom: 0.75rem;
+}
+
+.region-selector-info {
+  color: #4361ee;
+  font-weight: 500;
+}
+
+.region-selector-container {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  max-width: 900px;
+  user-select: none;
+  touch-action: none;
+  cursor: crosshair;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #dee2e6;
+  background: #f0f0f0;
+}
+
+.region-selector-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+/* Dark semi-transparent overlay outside the selection */
+.region-overlay {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.region-overlay-top {
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.region-overlay-bottom {
+  left: 0;
+  width: 100%;
+}
+
+.region-overlay-left {
+  left: 0;
+}
+
+.region-overlay-right {}
+
+/* Blue selection rectangle */
+.region-rect {
+  position: absolute;
+  border: 2.5px solid #4361ee;
+  background: rgba(67, 97, 238, 0.08);
+  box-shadow: 0 0 0 1px rgba(67, 97, 238, 0.3);
+  cursor: move;
+  z-index: 2;
+}
+
+/* Resize handles */
+.region-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border: 2px solid #4361ee;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: auto;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: background 0.1s;
+}
+
+.region-handle:hover {
+  background: #4361ee;
+}
+
+/* Size label floating inside the rectangle */
+.region-rect-label {
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(67, 97, 238, 0.8);
+  padding: 1px 6px;
+  border-radius: 3px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Action buttons below the selector */
+.region-selector-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+

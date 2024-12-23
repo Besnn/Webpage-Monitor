@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from django.conf import settings
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +55,42 @@ def delete_screenshot_file(rel_path: str) -> None:
         logger.exception("Failed to delete screenshot file: %s", rel_path)
 
 
+def _crop_to_region(abs_path, page_id: int) -> None:
+    """Crop the screenshot at *abs_path* to the monitored region (if any).
+
+    This is a plain synchronous helper that performs its own DB lookup.
+    """
+    from .models import MonitoredPage  # local import to avoid circular
+
+    try:
+        monitored_page = MonitoredPage.objects.get(id=page_id)
+    except MonitoredPage.DoesNotExist:
+        return
+
+    left_pct = monitored_page.region_left_pct
+    top_pct = monitored_page.region_top_pct
+    width_pct = monitored_page.region_width_pct
+    height_pct = monitored_page.region_height_pct
+
+    if width_pct >= 1.0 and height_pct >= 1.0 and left_pct <= 0 and top_pct <= 0:
+        return  # full page – nothing to crop
+
+    try:
+        img = Image.open(abs_path)
+        box = (
+            int(left_pct * img.width),
+            int(top_pct * img.height),
+            int((left_pct + width_pct) * img.width),
+            int((top_pct + height_pct) * img.height),
+        )
+        img.crop(box).save(str(abs_path))
+        logger.debug("Applied region crop to screenshot (page %s)", page_id)
+    except Exception:
+        logger.warning("Failed to crop screenshot for page %s", page_id, exc_info=True)
+
+
 # ---------------------------------------------------------------------------
-# Screenshot capture (Playwright)
+# Screenshot capture (Playwright) – synchronous version
 # ---------------------------------------------------------------------------
 
 def capture_screenshot(url: str, page_id: int, timeout_ms: int = 30_000) -> str:
@@ -67,7 +102,7 @@ def capture_screenshot(url: str, page_id: int, timeout_ms: int = 30_000) -> str:
     Returns an empty string on failure (logged, never raises).
     """
     try:
-        from playwright.sync_api import sync_playwright  # heavy import – keep lazy
+        from playwright.sync_api import sync_playwright
     except ImportError:
         logger.error("playwright is not installed – skipping screenshot")
         return ""
@@ -87,6 +122,9 @@ def capture_screenshot(url: str, page_id: int, timeout_ms: int = 30_000) -> str:
             page.screenshot(path=str(abs_path), full_page=True)
             context.close()
             browser.close()
+
+        # Crop to monitored region if configured
+        _crop_to_region(abs_path, page_id)
 
         logger.info("Screenshot saved: %s", abs_path)
         return rel_path
