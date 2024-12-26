@@ -41,6 +41,8 @@ class MonitoredPageCheck(models.Model):
 
     # Screenshot & visual diff fields (paths relative to SCREENSHOTS_DIR)
     screenshot_path = models.CharField(max_length=512, blank=True, default='')
+    crop_path = models.CharField(max_length=512, blank=True, default='',
+                                 help_text='Region-cropped screenshot used for diffing (empty when full-page)')
     diff_path = models.CharField(max_length=512, blank=True, default='')
     diff_score = models.FloatField(
         null=True, blank=True,

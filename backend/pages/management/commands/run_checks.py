@@ -80,18 +80,25 @@ class Command(BaseCommand):
         elapsed_ms = (time.perf_counter() - started_at) * 1000
 
         # --- Screenshot capture & visual diff ---
-        screenshot_rel, diff_rel, diff_score = "", "", None
+        screenshot_rel, crop_rel, diff_rel, diff_score = "", "", "", None
         if page.screenshot_enabled and is_up:
             try:
                 last_check = await sync_to_async(page.checks.order_by('-checked_at').first)()
-                screenshot_rel = await asyncio.to_thread(capture_screenshot, page.url, page.id)
+                screenshot_rel, crop_rel = await asyncio.to_thread(capture_screenshot, page.url, page.id)
+                # For diffing, prefer the cropped version when available
+                diff_source = crop_rel or screenshot_rel
                 if screenshot_rel and last_check and last_check.screenshot_path:
+                    # Use previous crop if it exists, otherwise previous full screenshot
+                    prev_diff_source = last_check.crop_path or last_check.screenshot_path
                     diff_rel, diff_score = await asyncio.to_thread(
-                        compute_diff, last_check.screenshot_path, screenshot_rel, page.id
+                        compute_diff, prev_diff_source, diff_source, page.id
                     )
                     if diff_score is not None and diff_score == 0:
                         delete_screenshot_file(screenshot_rel)
+                        if crop_rel:
+                            delete_screenshot_file(crop_rel)
                         screenshot_rel = last_check.screenshot_path
+                        crop_rel = last_check.crop_path
             except Exception:
                 pass  # never break the checker
 
@@ -103,6 +110,7 @@ class Command(BaseCommand):
             is_up=is_up,
             message=message,
             screenshot_path=screenshot_rel,
+            crop_path=crop_rel,
             diff_path=diff_rel,
             diff_score=diff_score,
         )

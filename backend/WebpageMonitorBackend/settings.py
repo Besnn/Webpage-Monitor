@@ -16,6 +16,11 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Development ports and defaults
+DJANGO_DEV_SERVER_PORT = 8000
+FRONTEND_DEV_SERVER_PORT = 5173
+POSTGRES_DEFAULT_PORT = "5432"
+SMTP_DEFAULT_DEV_PORT = "25"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -59,10 +64,10 @@ MIDDLEWARE = [
 # Whitelist the origins that are allowed to make cross-site HTTP requests.
 # This is typically your frontend's address.
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:5173",  # Vite dev server
-    "http://127.0.0.1:5173",
+    f"http://localhost:{DJANGO_DEV_SERVER_PORT}",
+    f"http://127.0.0.1:{DJANGO_DEV_SERVER_PORT}",
+    f"http://localhost:{FRONTEND_DEV_SERVER_PORT}",  # Vite dev server
+    f"http://127.0.0.1:{FRONTEND_DEV_SERVER_PORT}",
 ]
 
 # Allow cookies/authorization headers to be included in cross-site requests.
@@ -99,7 +104,7 @@ DATABASES = {
         "USER": "postgres",
         "PASSWORD": "TMP_PASSWORD_",
         "HOST": "localhost",
-        "PORT": "5432",
+        "PORT": POSTGRES_DEFAULT_PORT,
     }
 }
 
@@ -157,20 +162,64 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 RECENT_CHECKS_LIMIT = 10
 
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
 
-# Email configuration (defaults to console backend for development)
-# Override via environment variables for real SMTP in production.
+# ---------------------------------------------------------------------------
+# Logging — show INFO from app modules in the console
+# ---------------------------------------------------------------------------
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name}: {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        # App-level loggers — INFO and above
+        "pages": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "authentication": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        # Django's own request/server logger
+        "django": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
+
+# Email configuration
+# Defaults to the SMTP backend pointed at localhost:1025 (smtp4dev / MailHog / etc).
+# Override any of these via environment variables.
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
-    "django.core.mail.backends.console.EmailBackend",
+    "django.core.mail.backends.smtp.EmailBackend",
 )
 EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "25"))
+# smtp4dev default: 25   MailHog default: 1025   Papercut default: 25
+# Override with the EMAIL_PORT environment variable to match your local tool.
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", SMTP_DEFAULT_DEV_PORT))
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "false").lower() in {"1", "true", "yes"}
 EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() in {"1", "true", "yes"}
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "webmon@localhost")
 SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+
+# Base URL used in notification emails to build absolute links to screenshots
+SITE_BASE_URL = os.getenv("SITE_BASE_URL", f"http://localhost:{DJANGO_DEV_SERVER_PORT}")

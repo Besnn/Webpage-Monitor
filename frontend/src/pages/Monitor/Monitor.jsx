@@ -490,9 +490,9 @@ function Monitor() {
   const [screenshotTab, setScreenshotTab] = useState('latest')
   // Track when data was last refreshed
   const [lastRefreshed, setLastRefreshed] = useState(null)
-
-  // Lightbox state — index into screenshotLogs array, or null
-  const [lightboxIndex, setLightboxIndex] = useState(null)
+  // Selected screenshot index — clicking a thumbnail updates the main view
+  // null = show the latest screenshot (default behaviour)
+  const [selectedCheckIndex, setSelectedCheckIndex] = useState(null)
 
   // --- Auto-refreshing data loader ---
   const POLL_INTERVAL_MS = 30_000 // refresh every 30 seconds
@@ -633,27 +633,26 @@ function Monitor() {
 
   /* ---- screenshot data ---- */
   const hasScreenshot = !!summary?.last_screenshot_url
-  const hasDiff = !!summary?.last_diff_url
 
   // All logs with a screenshot, ordered newest-first (same as logs)
   const screenshotLogs = logs.filter(l => l.screenshot_url)
-  const prevScreenshot = screenshotLogs.length > 1 ? screenshotLogs[1] : null
 
-  // Lightbox navigation helpers
-  const lightboxOpen = lightboxIndex !== null && screenshotLogs[lightboxIndex]
-  const lightboxLog = lightboxOpen ? screenshotLogs[lightboxIndex] : null
+  // The currently selected check for the main view.
+  // If nothing is explicitly selected, default to the latest (index 0).
+  const activeIndex = selectedCheckIndex !== null && selectedCheckIndex < screenshotLogs.length
+    ? selectedCheckIndex
+    : 0
+  const activeCheck = screenshotLogs[activeIndex] || null
 
-  const openLightboxForLog = (log) => {
+  // The "previous" check relative to the active one (next older screenshot).
+  const prevCheck = screenshotLogs[activeIndex + 1] || null
+
+  const hasDiff = !!activeCheck?.diff_url
+
+  const selectScreenshot = (log) => {
     const idx = screenshotLogs.findIndex(l => l.id === log.id)
-    setLightboxIndex(idx >= 0 ? idx : 0)
+    setSelectedCheckIndex(idx >= 0 ? idx : 0)
   }
-  const openLightboxForUrl = (url) => {
-    // find the log whose screenshot_url matches
-    const idx = screenshotLogs.findIndex(l => buildApiUrl(l.screenshot_url) === url)
-    setLightboxIndex(idx >= 0 ? idx : 0)
-  }
-  const lightboxPrev = () => setLightboxIndex(i => Math.min((i ?? 0) + 1, screenshotLogs.length - 1))
-  const lightboxNext = () => setLightboxIndex(i => Math.max((i ?? 0) - 1, 0))
 
   return (
     <Container className="monitor-page">
@@ -738,8 +737,8 @@ function Monitor() {
                       onClick={() => setScreenshotTab(tab)}
                       disabled={
                         (tab === 'diff' && !hasDiff) ||
-                        (tab === 'overlay' && !prevScreenshot) ||
-                        (tab === 'side' && !prevScreenshot)
+                        (tab === 'overlay' && !prevCheck) ||
+                        (tab === 'side' && !prevCheck)
                       }
                     >
                       {tab === 'latest' && 'Latest'}
@@ -751,7 +750,7 @@ function Monitor() {
                 </div>
               </div>
 
-              {!hasScreenshot ? (
+              {!hasScreenshot || !activeCheck ? (
                 <div className="chart-placeholder">
                   No screenshots yet. Enable screenshots in Settings and wait for the next check.
                 </div>
@@ -761,13 +760,14 @@ function Monitor() {
                   {screenshotTab === 'latest' && (
                     <div className="screenshot-single">
                       <ScreenshotImage
-                        src={buildApiUrl(summary.last_screenshot_url)}
-                        alt="Latest screenshot"
-                        onClick={() => openLightboxForUrl(buildApiUrl(summary.last_screenshot_url))}
+                        src={buildApiUrl(activeCheck.screenshot_url)}
+                        alt="Screenshot"
                       />
                       <p className="screenshot-caption">
-                        Captured {summary?.last_checked_at ? formatTimestamp(summary.last_checked_at) : ''}
-                        &nbsp;·&nbsp;Click to enlarge
+                        Captured {formatTimestamp(activeCheck.checked_at)}
+                        {activeCheck.diff_score !== null && activeCheck.diff_score !== undefined && (
+                          <> · {diffScoreBadge(activeCheck.diff_score)}</>
+                        )}
                       </p>
                     </div>
                   )}
@@ -776,70 +776,68 @@ function Monitor() {
                   {screenshotTab === 'diff' && hasDiff && (
                     <div className="screenshot-single">
                       <div className="diff-score-banner">
-                        Change score: <strong>{summary.last_diff_score ?? 0}%</strong>
-                        {diffScoreBadge(summary.last_diff_score)}
+                        Change score: <strong>{activeCheck.diff_score ?? 0}%</strong>
+                        {diffScoreBadge(activeCheck.diff_score)}
                       </div>
                       <ScreenshotImage
-                        src={buildApiUrl(summary.last_diff_url)}
+                        src={buildApiUrl(activeCheck.diff_url)}
                         alt="Visual diff"
                         className="diff-img"
-                        onClick={() => setLightboxIndex(null)}
                       />
                       <p className="screenshot-caption">
-                        Highlighted pixel differences between the last two checks.
+                        Highlighted pixel differences between this check and the previous one.
                         Brighter areas = more change.
                       </p>
                     </div>
                   )}
 
                   {/* --- Overlay slider tab --- */}
-                  {screenshotTab === 'overlay' && prevScreenshot && (
+                  {screenshotTab === 'overlay' && prevCheck && (
                     <div className="screenshot-single">
                       <p className="screenshot-caption mb-2" style={{ marginBottom: '0.5rem' }}>
-                        Drag the slider to compare previous ↔ latest
+                        Drag the slider to compare previous ↔ selected
                       </p>
                       <OverlaySlider
-                        beforeSrc={buildApiUrl(prevScreenshot.screenshot_url)}
-                        afterSrc={buildApiUrl(summary.last_screenshot_url)}
+                        beforeSrc={buildApiUrl(prevCheck.screenshot_url)}
+                        afterSrc={buildApiUrl(activeCheck.screenshot_url)}
                         beforeLabel="Previous"
-                        afterLabel="Latest"
+                        afterLabel="Selected"
                       />
                     </div>
                   )}
 
                   {/* --- Side by side tab --- */}
-                  {screenshotTab === 'side' && prevScreenshot && (
+                  {screenshotTab === 'side' && prevCheck && (
                     <div className="screenshot-side-by-side">
                       <div className="screenshot-panel">
                         <h6>Previous</h6>
                         <ScreenshotImage
-                          src={buildApiUrl(prevScreenshot.screenshot_url)}
+                          src={buildApiUrl(prevCheck.screenshot_url)}
                           alt="Previous screenshot"
-                          onClick={() => openLightboxForLog(prevScreenshot)}
+                          onClick={() => selectScreenshot(prevCheck)}
                         />
-                        <p className="screenshot-caption">{formatTimestamp(prevScreenshot.checked_at)}</p>
+                        <p className="screenshot-caption">{formatTimestamp(prevCheck.checked_at)}</p>
                       </div>
                       <div className="screenshot-panel">
-                        <h6>Latest</h6>
+                        <h6>Selected</h6>
                         <ScreenshotImage
-                          src={buildApiUrl(summary.last_screenshot_url)}
-                          alt="Latest screenshot"
-                          onClick={() => openLightboxForUrl(buildApiUrl(summary.last_screenshot_url))}
+                          src={buildApiUrl(activeCheck.screenshot_url)}
+                          alt="Selected screenshot"
                         />
-                        <p className="screenshot-caption">{summary?.last_checked_at ? formatTimestamp(summary.last_checked_at) : ''}</p>
+                        <p className="screenshot-caption">{formatTimestamp(activeCheck.checked_at)}</p>
                       </div>
                     </div>
                   )}
 
                   {/* --- Thumbnail gallery --- */}
                   {screenshotLogs.length > 0 && <div className="screenshot-gallery">
-                      <div className="screenshot-gallery-label">Recent screenshots</div>
+                      <div className="screenshot-gallery-label">Recent screenshots (click to view)</div>
                       <div className="screenshot-gallery-strip">
                         {screenshotLogs.map((log, idx) => (
                           <button
                             key={log.id}
-                            className={`screenshot-thumb-btn ${idx === 0 ? 'active' : ''}`}
-                            onClick={() => openLightboxForLog(log)}
+                            className={`screenshot-thumb-btn ${idx === activeIndex ? 'active' : ''}`}
+                            onClick={() => selectScreenshot(log)}
                             title={formatTimestamp(log.checked_at)}
                           >
                             <img
@@ -937,7 +935,11 @@ function Monitor() {
                 {site.screenshot_enabled && (
                   <td>
                     {log.screenshot_url ? (
-                      <Button size="sm" variant="outline-primary" onClick={() => openLightboxForLog(log)}>
+                      <Button size="sm" variant="outline-primary" onClick={() => {
+                        selectScreenshot(log)
+                        // Scroll to the screenshot section
+                        document.querySelector('.screenshot-section')?.scrollIntoView({ behavior: 'smooth' })
+                      }}>
                         🖼️ View
                       </Button>
                     ) : '—'}
@@ -952,49 +954,6 @@ function Monitor() {
         </Table>
       </div>
 
-      {/* ============================================================
-           SCREENSHOT LIGHTBOX with prev/next navigation
-           ============================================================ */}
-      <Modal show={lightboxOpen} onHide={() => setLightboxIndex(null)} size="xl" centered dialogClassName="screenshot-lightbox-dialog">
-        <Modal.Header closeButton>
-          <Modal.Title>
-            Screenshot
-            {lightboxLog && (
-              <span className="ms-2 text-muted" style={{ fontSize: '0.85rem' }}>
-                {formatTimestamp(lightboxLog.checked_at)}
-                {lightboxLog.diff_score !== null && lightboxLog.diff_score !== undefined && (
-                  <> · {diffScoreBadge(lightboxLog.diff_score)}</>
-                )}
-              </span>
-            )}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="text-center p-0 position-relative">
-          {lightboxLog && (
-            <>
-              <img
-                src={buildApiUrl(lightboxLog.screenshot_url)}
-                alt="Screenshot full view"
-                className="lightbox-main-img"
-              />
-              {/* Navigation arrows */}
-              {lightboxIndex < screenshotLogs.length - 1 && (
-                <button className="lightbox-nav lightbox-nav-left" onClick={lightboxPrev} title="Older screenshot">
-                  ‹
-                </button>
-              )}
-              {lightboxIndex > 0 && (
-                <button className="lightbox-nav lightbox-nav-right" onClick={lightboxNext} title="Newer screenshot">
-                  ›
-                </button>
-              )}
-              <div className="lightbox-counter">
-                {lightboxIndex + 1} / {screenshotLogs.length}
-              </div>
-            </>
-          )}
-        </Modal.Body>
-      </Modal>
 
       {/* ---- Settings Modal ---- */}
       <Modal show={showSettings} onHide={handleSettingsClose} size="lg">

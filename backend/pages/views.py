@@ -95,23 +95,31 @@ def _perform_single_check(page, timeout_seconds: int = 10) -> None:
 
     # --- Screenshot capture & visual diff ---
     screenshot_rel = ""
+    crop_rel = ""
     diff_rel = ""
     diff_score = None
     if page.screenshot_enabled and is_up:
         try:
-            screenshot_rel = capture_screenshot(page.url, page.id)
+            screenshot_rel, crop_rel = capture_screenshot(page.url, page.id)
+            # For diffing, prefer the cropped version when available
+            diff_source = crop_rel or screenshot_rel
             prev_check = page.checks.order_by('-checked_at').first()
             if screenshot_rel and prev_check and prev_check.screenshot_path:
+                # Use previous crop if it exists, otherwise previous full screenshot
+                prev_diff_source = prev_check.crop_path or prev_check.screenshot_path
                 diff_rel, diff_score = compute_diff(
-                    prev_check.screenshot_path, screenshot_rel, page.id
+                    prev_diff_source, diff_source, page.id
                 )
                 # If nothing changed, discard the new screenshot and
                 # reuse the previous one so we don't waste disk space.
                 if diff_score is not None and diff_score == 0:
                     delete_screenshot_file(screenshot_rel)
+                    if crop_rel:
+                        delete_screenshot_file(crop_rel)
                     screenshot_rel = prev_check.screenshot_path
+                    crop_rel = prev_check.crop_path
         except Exception:
-            pass
+            crop_rel = ""
 
     # Store the check result
     latest = MonitoredPageCheck.objects.create(
@@ -122,6 +130,7 @@ def _perform_single_check(page, timeout_seconds: int = 10) -> None:
         is_up=is_up,
         message=message,
         screenshot_path=screenshot_rel,
+        crop_path=crop_rel,
         diff_path=diff_rel,
         diff_score=diff_score,
     )
