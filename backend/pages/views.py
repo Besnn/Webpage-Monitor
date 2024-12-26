@@ -14,7 +14,7 @@ import urllib.error
 
 from .models import MonitoredPage, MonitoredPageCheck
 from .notifications import handle_post_check_notification, handle_change_notification
-from .screenshots import capture_screenshot, compute_diff, _screenshots_root, delete_screenshot_file, cleanup_old_screenshots
+from .screenshots import capture_screenshot, compute_diff, _screenshots_root, delete_screenshot_file, cleanup_old_screenshots, get_or_create_thumbnail, create_thumbnail
 
 # Create your views here.
 
@@ -29,18 +29,35 @@ def monitor(request):
         return JsonResponse({'error': 'Not authenticated'}, status=401)
 
     if request.method == 'GET':
+        import threading
         pages = MonitoredPage.objects.filter(user=user).order_by('-created_at')
         page_list = []
         for page in pages:
             last_check = page.checks.exclude(screenshot_path='').order_by('-checked_at').first()
-            screenshot_url = ''
+            thumbnail_url = ''
             if last_check and last_check.screenshot_path:
-                screenshot_url = f'/api/screenshots/{last_check.screenshot_path}'
+                # Get or lazily generate the low-res thumbnail
+                thumb_rel = get_or_create_thumbnail(last_check.screenshot_path, page.id)
+                if thumb_rel:
+                    thumbnail_url = f'/api/screenshots/{thumb_rel}'
+                else:
+                    # Thumbnail generation failed — fall back to full image
+                    thumbnail_url = f'/api/screenshots/{last_check.screenshot_path}'
+            else:
+                # No screenshot at all — kick off a background capture so it
+                # shows up next time the home page is loaded
+                def _bg_capture(p=page):
+                    try:
+                        _perform_single_check(p, force_screenshot=True)
+                    except Exception:
+                        pass
+                threading.Thread(target=_bg_capture, daemon=True).start()
+
             page_list.append({
                 'id': page.id,
                 'url': page.url,
                 'created_at': page.created_at.isoformat(),
-                'last_screenshot_url': screenshot_url,
+                'last_screenshot_url': thumbnail_url,
             })
         return JsonResponse({'pages': page_list}, status=200)
 

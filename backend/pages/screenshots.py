@@ -57,6 +57,53 @@ def _save_jpeg(img: Image.Image, path) -> None:
     img.save(str(path), format="JPEG", quality=JPEG_QUALITY, optimize=True)
 
 
+# Thumbnail width in pixels — height is calculated to preserve aspect ratio
+THUMBNAIL_WIDTH = 480
+THUMBNAIL_JPEG_QUALITY = 55
+
+
+def create_thumbnail(source_rel: str, page_id: int) -> str:
+    """Generate a low-res thumbnail JPEG from an existing screenshot.
+
+    Saves it alongside the source as ``<stem>_thumb.jpg``.
+    Returns the relative path of the thumbnail, or '' on failure.
+    """
+    root = _screenshots_root()
+    src_abs = root / source_rel
+    if not src_abs.is_file():
+        return ''
+    thumb_abs = src_abs.with_name(src_abs.stem + '_thumb.jpg')
+    # Return immediately if already generated
+    if thumb_abs.is_file():
+        return str(thumb_abs.relative_to(root))
+    try:
+        with Image.open(src_abs) as img:
+            if img.mode not in ('RGB', 'L'):
+                img = img.convert('RGB')
+            w, h = img.size
+            new_h = max(1, int(h * THUMBNAIL_WIDTH / w))
+            thumb = img.resize((THUMBNAIL_WIDTH, new_h), Image.LANCZOS)
+            thumb.save(str(thumb_abs), format='JPEG',
+                       quality=THUMBNAIL_JPEG_QUALITY, optimize=True)
+        logger.debug("Thumbnail saved: %s", thumb_abs)
+        return str(thumb_abs.relative_to(root))
+    except Exception:
+        logger.warning("Failed to create thumbnail for %s", source_rel, exc_info=True)
+        return ''
+
+
+def get_or_create_thumbnail(source_rel: str, page_id: int) -> str:
+    """Return the thumbnail rel-path for *source_rel*, creating it if needed."""
+    if not source_rel:
+        return ''
+    root = _screenshots_root()
+    src_abs = root / source_rel
+    thumb_abs = src_abs.with_name(src_abs.stem + '_thumb.jpg')
+    if thumb_abs.is_file():
+        return str(thumb_abs.relative_to(root))
+    return create_thumbnail(source_rel, page_id)
+
+
 def delete_screenshot_file(rel_path: str) -> None:
     """Delete a screenshot artefact from disk.  Silently ignores missing files."""
     if not rel_path:
@@ -158,6 +205,8 @@ def capture_screenshot(url: str, page_id: int, timeout_ms: int = 30_000) -> tupl
             crop_rel = str(Path(cropped_abs).relative_to(_screenshots_root()))
 
         logger.info("Screenshot saved: %s", abs_path)
+        # Pre-generate the thumbnail so it's ready for the home page
+        create_thumbnail(rel_path, page_id)
         return (rel_path, crop_rel)
     except Exception:
         logger.exception("Failed to capture screenshot for page %s (%s)", page_id, url)
