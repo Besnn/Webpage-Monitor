@@ -1,46 +1,39 @@
 import React, { useEffect, useState } from 'react'
-
 import { useNavigate } from "react-router-dom"
 import Button from 'react-bootstrap/Button'
-
 import 'bootstrap/dist/css/bootstrap.css'
-
 import './Home.css'
 
 function Home() {
   const navigate = useNavigate()
 
-   const [server_url,] = useState(import.meta.env.DEV ?
-       import.meta.env.VITE_DEVELOPMENT_SERVER_URL : import.meta.env.VITE_PRODUCTION_SERVER_URL)
-   const [isValidHttpURL, setIsValidHttpURL] = useState(false)
-   const [urlText, setURLText] = useState('')
-   const [buttonText, setButtonText] = useState('Enter valid URL')
-   const [monitoredSites, setMonitoredSites] = useState([])
+  const [server_url,] = useState(import.meta.env.DEV ?
+    import.meta.env.VITE_DEVELOPMENT_SERVER_URL : import.meta.env.VITE_PRODUCTION_SERVER_URL)
+  const [isValidHttpURL, setIsValidHttpURL] = useState(false)
+  const [urlText, setURLText] = useState('')
+  const [buttonText, setButtonText] = useState('Enter valid URL')
+  const [monitoredSites, setMonitoredSites] = useState([])
+
+  const buildUrl = (path) => {
+    const base = (server_url || window.location.origin).replace(/\/$/, '')
+    return `${base}${path}`
+  }
 
   useEffect(() => {
     const loadMonitoredSites = async () => {
       try {
-        const response = await fetch(`${server_url}/monitor`, {
-          credentials: 'include',
-        })
-        if (!response.ok) {
-          if (import.meta.env.DEV) {
-            console.error('Failed to load monitored sites:', response.statusText)
-          }
-          return
-        }
+        const response = await fetch(buildUrl('/monitor'), { credentials: 'include' })
+        if (!response.ok) return
         const data = await response.json()
         setMonitoredSites((data.pages || []).map((page) => ({
           id: page.id,
           url: page.url,
+          last_screenshot_url: page.last_screenshot_url || '',
         })))
       } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error('Error loading monitored sites:', error.message)
-        }
+        if (import.meta.env.DEV) console.error('Error loading monitored sites:', error.message)
       }
     }
-
     loadMonitoredSites()
   }, [server_url])
 
@@ -105,9 +98,6 @@ function Home() {
   }
 
   const handleCardClick = (siteId) => {
-    if (import.meta.env.DEV) {
-      console.log('Selected site:', siteId)
-    }
     navigate(`/monitor/${siteId}`)
   }
 
@@ -126,54 +116,68 @@ function Home() {
   }
 
   return (
-        <div className="home-page">
-          <div id="center-container">
-            <div className="intro-text">
-              <h1>Monitor websites you care about</h1>
-              <p>
-                Add the URL of any website you want to monitor. The app builds a dashboard with
-                relevant options and stats so you can keep track of changes over time.
-              </p>
-            </div>
-            <div id='searchbox-container'>
-              <form onSubmit={handleSubmit}>
-                <input
-                    onChange={(e) => handleChange(e.target.value)}
-                    value={urlText}
-                    id='searchbox' type='text' placeholder='Enter URL (for example https://google.com)'
-                    autoFocus
-                >
-                </input>
-                <Button id='searchbox-button' onClick={(e) => handleSubmit(e)} disabled={!isValidHttpURL}>
-                  {buttonText}
-                </Button>
-              </form>
-            </div>
-          </div>
-
-          <section className="dashboard">
-            <h2 className="dashboard-title">Monitored Sites</h2>
-            {monitoredSites.length === 0 ? (
-              <p className="empty-dashboard">No monitored sites yet. Add a URL above to start monitoring.</p>
-            ) : (
-              <div className="dashboard-grid">
-                {monitoredSites.map((site) => (
-                  <button
-                    type="button"
-                    key={site.id}
-                    className="site-card"
-                    onClick={() => handleCardClick(site.id)}
-                  >
-                    <span className="site-label">{site.url}</span>
-                    <span className="site-action">View monitor</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
+    <div className="home-page">
+      <div id="center-container">
+        <div className="intro-text">
+          <h1>Monitor websites you care about</h1>
+          <p>
+            Add the URL of any website you want to monitor. The app builds a dashboard with
+            relevant options and stats so you can keep track of changes over time.
+          </p>
         </div>
+        <div id='searchbox-container'>
+          <form onSubmit={handleSubmit}>
+            <input
+              onChange={(e) => handleChange(e.target.value)}
+              value={urlText}
+              id='searchbox' type='text' placeholder='Enter URL (for example https://google.com)'
+              autoFocus
+            />
+            <Button id='searchbox-button' onClick={(e) => handleSubmit(e)} disabled={!isValidHttpURL}>
+              {buttonText}
+            </Button>
+          </form>
+        </div>
+      </div>
+
+      <section className="dashboard">
+        <h2 className="dashboard-title">Monitored Sites</h2>
+        {monitoredSites.length === 0 ? (
+          <p className="empty-dashboard">No monitored sites yet. Add a URL above to start monitoring.</p>
+        ) : (
+          <div className="dashboard-grid">
+            {monitoredSites.map((site) => (
+              <button
+                type="button"
+                key={site.id}
+                className="site-card"
+                onClick={() => handleCardClick(site.id)}
+              >
+                {site.last_screenshot_url ? (
+                  <div className="site-card-thumb-wrap">
+                    <img
+                      src={buildUrl(site.last_screenshot_url)}
+                      alt={`Screenshot of ${site.url}`}
+                      className="site-card-thumb"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : (
+                  <div className="site-card-thumb-placeholder">
+                    <span>No screenshot yet</span>
+                  </div>
+                )}
+                <div className="site-card-body">
+                  <span className="site-label">{site.url}</span>
+                  <span className="site-action">View monitor →</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
   )
 }
 
 export default Home
-

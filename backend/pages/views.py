@@ -29,8 +29,20 @@ def monitor(request):
         return JsonResponse({'error': 'Not authenticated'}, status=401)
 
     if request.method == 'GET':
-        pages = MonitoredPage.objects.filter(user=user).values('id', 'url', 'created_at')
-        return JsonResponse({'pages': list(pages)}, status=200)
+        pages = MonitoredPage.objects.filter(user=user).order_by('-created_at')
+        page_list = []
+        for page in pages:
+            last_check = page.checks.exclude(screenshot_path='').order_by('-checked_at').first()
+            screenshot_url = ''
+            if last_check and last_check.screenshot_path:
+                screenshot_url = f'/api/screenshots/{last_check.screenshot_path}'
+            page_list.append({
+                'id': page.id,
+                'url': page.url,
+                'created_at': page.created_at.isoformat(),
+                'last_screenshot_url': screenshot_url,
+            })
+        return JsonResponse({'pages': page_list}, status=200)
 
     try:
         data = json.loads(request.body.decode('utf-8'))
@@ -40,9 +52,10 @@ def monitor(request):
 
         page, created = MonitoredPage.objects.get_or_create(user=user, url=url)
 
-        # If this is a newly created page, immediately perform a check so the UI has fresh status
+        # If this is a newly created page, immediately perform a check so the UI
+        # has fresh status, and always capture an initial screenshot for the thumbnail.
         if created:
-            _perform_single_check(page)
+            _perform_single_check(page, force_screenshot=True)
 
         return JsonResponse(
             {
@@ -59,8 +72,12 @@ def monitor(request):
         return JsonResponse({'error': 'Invalid JSON format'}, status=400)
 
 
-def _perform_single_check(page, timeout_seconds: int = 10) -> None:
-    """Perform a single HTTP check for the given MonitoredPage and store the result."""
+def _perform_single_check(page, timeout_seconds: int = 10, force_screenshot: bool = False) -> None:
+    """Perform a single HTTP check for the given MonitoredPage and store the result.
+
+    When *force_screenshot* is True a screenshot is captured even if
+    ``page.screenshot_enabled`` is False (used for the initial thumbnail on add).
+    """
     started_at = time.perf_counter()
     status_code = None
     is_up = False
@@ -98,7 +115,7 @@ def _perform_single_check(page, timeout_seconds: int = 10) -> None:
     crop_rel = ""
     diff_rel = ""
     diff_score = None
-    if page.screenshot_enabled and is_up:
+    if (page.screenshot_enabled or force_screenshot) and is_up:
         try:
             screenshot_rel, crop_rel = capture_screenshot(page.url, page.id)
             # For diffing, prefer the cropped version when available

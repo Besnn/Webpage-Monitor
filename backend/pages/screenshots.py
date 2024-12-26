@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 # Maximum number of screenshots to keep per monitored page.
 MAX_SCREENSHOTS_PER_PAGE = 30
 
+# JPEG quality for all saved images (1-95). Higher = better quality, larger file.
+JPEG_QUALITY = int(getattr(settings, "SCREENSHOT_JPEG_QUALITY", 82))
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -29,19 +32,29 @@ def _screenshots_root() -> Path:
 
 
 def _page_dir(page_id: int) -> Path:
-    """Return the per-page sub-directory inside SCREENSHOTS_DIR."""
     d = _screenshots_root() / str(page_id)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def _unique_filename(page_id: int, suffix: str = ".png") -> str:
-    """Return a filename like ``<page_id>/<timestamp_hash>.png``."""
+def _unique_filename(page_id: int, suffix: str = ".jpg") -> str:
+    """Return a filename like ``<page_id>/<timestamp_hash>.jpg``."""
     import time
     ts = str(time.time_ns())
     HASH_PREFIX_LENGTH = 10
     h = hashlib.md5(ts.encode()).hexdigest()[:HASH_PREFIX_LENGTH]
     return os.path.join(str(page_id), f"{h}{suffix}")
+
+
+def _save_jpeg(img: Image.Image, path) -> None:
+    """Save a Pillow image as JPEG, converting RGBA/P modes first."""
+    if img.mode in ("RGBA", "P", "LA"):
+        bg = Image.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+        img = bg
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    img.save(str(path), format="JPEG", quality=JPEG_QUALITY, optimize=True)
 
 
 def delete_screenshot_file(rel_path: str) -> None:
@@ -57,7 +70,7 @@ def delete_screenshot_file(rel_path: str) -> None:
 
 
 def _crop_to_region(abs_path, page_id: int) -> str | None:
-    """Create a cropped copy of the screenshot for diff comparison.
+    """Create a cropped JPEG copy of the screenshot for diff comparison.
 
     The original full-page screenshot at *abs_path* is kept intact.
     Returns the absolute path of the cropped file, or ``None`` if no crop
@@ -70,9 +83,9 @@ def _crop_to_region(abs_path, page_id: int) -> str | None:
     except MonitoredPage.DoesNotExist:
         return None
 
-    left_pct = monitored_page.region_left_pct
-    top_pct = monitored_page.region_top_pct
-    width_pct = monitored_page.region_width_pct
+    left_pct   = monitored_page.region_left_pct
+    top_pct    = monitored_page.region_top_pct
+    width_pct  = monitored_page.region_width_pct
     height_pct = monitored_page.region_height_pct
 
     if width_pct >= 1.0 and height_pct >= 1.0 and left_pct <= 0 and top_pct <= 0:
@@ -81,15 +94,18 @@ def _crop_to_region(abs_path, page_id: int) -> str | None:
     try:
         img = Image.open(abs_path)
         box = (
-            int(left_pct * img.width),
-            int(top_pct * img.height),
-            int((left_pct + width_pct) * img.width),
-            int((top_pct + height_pct) * img.height),
+            int(left_pct   * img.width),
+            int(top_pct    * img.height),
+            int((left_pct  + width_pct)  * img.width),
+            int((top_pct   + height_pct) * img.height),
         )
-        cropped_path = Path(str(abs_path).replace('.png', '_crop.png'))
-        img.crop(box).save(str(cropped_path))
-        logger.debug("Saved cropped copy for diff (page %s): %s", page_id, cropped_path)
-        return str(cropped_path)
+        # Derive crop path: replace extension with _crop.jpg
+        crop_path = Path(str(abs_path)).with_suffix('').with_name(
+            Path(abs_path).stem + "_crop.jpg"
+        )
+        _save_jpeg(img.crop(box), crop_path)
+        logger.debug("Saved cropped copy for diff (page %s): %s", page_id, crop_path)
+        return str(crop_path)
     except Exception:
         logger.warning("Failed to crop screenshot for page %s", page_id, exc_info=True)
         return None
@@ -100,13 +116,11 @@ def _crop_to_region(abs_path, page_id: int) -> str | None:
 # ---------------------------------------------------------------------------
 
 def capture_screenshot(url: str, page_id: int, timeout_ms: int = 30_000) -> tuple[str, str]:
-    """Capture a full-page screenshot of *url*.
+    """Capture a full-page screenshot of *url* and save it as JPEG.
 
     Returns ``(full_rel_path, crop_rel_path)`` where *crop_rel_path* is the
-    region-cropped copy used for diffing (empty string when there is no
-    region crop configured).  The full screenshot is always preserved.
-
-    Returns ``("", "")`` on failure (logged, never raises).
+    region-cropped copy used for diffing (empty string when no region is set).
+    Returns ``("", "")`` on failure.
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -114,7 +128,7 @@ def capture_screenshot(url: str, page_id: int, timeout_ms: int = 30_000) -> tupl
         logger.error("playwright is not installed – skipping screenshot")
         return ("", "")
 
-    rel_path = _unique_filename(page_id, ".png")
+    rel_path = _unique_filename(page_id, ".jpg")
     abs_path = _screenshots_root() / rel_path
 
     try:
@@ -126,9 +140,16 @@ def capture_screenshot(url: str, page_id: int, timeout_ms: int = 30_000) -> tupl
             )
             page = context.new_page()
             page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-            page.screenshot(path=str(abs_path), full_page=True)
+            # Playwright captures PNG natively; we convert to JPEG after
+            tmp_png = abs_path.with_suffix(".tmp.png")
+            page.screenshot(path=str(tmp_png), full_page=True)
             context.close()
             browser.close()
+
+        # Convert PNG → JPEG and remove the temp file
+        with Image.open(str(tmp_png)) as raw:
+            _save_jpeg(raw, abs_path)
+        tmp_png.unlink(missing_ok=True)
 
         # Create a cropped copy for diff comparison (if region is configured)
         cropped_abs = _crop_to_region(abs_path, page_id)
@@ -148,7 +169,7 @@ def capture_screenshot(url: str, page_id: int, timeout_ms: int = 30_000) -> tupl
 # ---------------------------------------------------------------------------
 
 def compute_diff(prev_rel_path: str, curr_rel_path: str, page_id: int) -> tuple[str, float | None]:
-    """Compare two screenshots and produce a highlighted-diff image.
+    """Compare two screenshots and produce a highlighted-diff JPEG.
 
     Returns ``(diff_rel_path, diff_score)`` where *diff_score* is 0–100.
     ``("", None)`` is returned when diffing is not possible.
@@ -174,76 +195,53 @@ def compute_diff(prev_rel_path: str, curr_rel_path: str, page_id: int) -> tuple[
         img_prev = Image.open(prev_abs).convert("RGB")
         img_curr = Image.open(curr_abs).convert("RGB")
 
-        # Resize to same dimensions (use the larger canvas)
         w = max(img_prev.width, img_curr.width)
         h = max(img_prev.height, img_curr.height)
-        WHITE_RGB = (255, 255, 255)
-        canvas_prev = Image.new("RGB", (w, h), WHITE_RGB)
-        canvas_curr = Image.new("RGB", (w, h), WHITE_RGB)
+        canvas_prev = Image.new("RGB", (w, h), (255, 255, 255))
+        canvas_curr = Image.new("RGB", (w, h), (255, 255, 255))
         canvas_prev.paste(img_prev, (0, 0))
         canvas_curr.paste(img_curr, (0, 0))
 
-        # Perceptual hash distance → score 0-100
         hash_prev = imagehash.phash(canvas_prev)
         hash_curr = imagehash.phash(canvas_curr)
-        hamming = hash_prev - hash_curr  # int
-        PHASH_BIT_COUNT = 64
-        SCORE_PERCENTAGE_SCALE = 100
-        SCORE_ROUNDING_DECIMALS = 2
-        score = round((hamming / PHASH_BIT_COUNT) * SCORE_PERCENTAGE_SCALE, SCORE_ROUNDING_DECIMALS)
+        hamming   = hash_prev - hash_curr
+        score     = round((hamming / 64) * 100, 2)
 
-        # Only create the diff image when there is an actual change
         diff_rel = ""
         if score > 0:
-            # Build a highlighted overlay: start from the current screenshot,
-            # tint changed pixels blue (#3b82f6) so the result looks like the
-            # real page with changes marked in blue — readable, not inverted.
             from PIL import ImageChops
 
             raw_diff = ImageChops.difference(canvas_prev, canvas_curr)
 
-            # Split channels to find changed pixels without numpy
-            # A pixel is "changed" if any channel differs by more than threshold
             THRESHOLD = 10
-            ALPHA = 0.55
-            # Highlight colour: blue #3b82f6 = (59, 130, 246)
-            H_R, H_G, H_B = 59, 130, 246
+            ALPHA     = 0.55
+            H_R, H_G, H_B = 59, 130, 246   # blue #3b82f6
 
             r_diff, g_diff, b_diff = raw_diff.split()
             r_curr, g_curr, b_curr = canvas_curr.split()
 
-            # Build a mask: pixels where any channel change > THRESHOLD
-            # Use point() to threshold each channel, then composite them with "lighter"
             def _thresh(ch):
                 return ch.point(lambda v: 255 if v > THRESHOLD else 0)
 
-            mask_r = _thresh(r_diff)
-            mask_g = _thresh(g_diff)
-            mask_b = _thresh(b_diff)
-
-            # Combine: a pixel is "changed" if ANY channel is above threshold
             from PIL import ImageChops as IC
-            changed = IC.lighter(IC.lighter(mask_r, mask_g), mask_b)
+            changed = IC.lighter(IC.lighter(_thresh(r_diff), _thresh(g_diff)), _thresh(b_diff))
 
-            # Blend: out = curr * (1-alpha) + highlight * alpha  for changed pixels
-            #        out = curr                                   for unchanged pixels
             def _blend(curr_ch, highlight_val):
-                # curr_ch blended toward highlight_val at ALPHA strength
                 blended = curr_ch.point(lambda v: int(v * (1 - ALPHA) + highlight_val * ALPHA))
-                # Composite: use blended where changed, original elsewhere
                 out = Image.new("L", curr_ch.size)
                 out.paste(blended, mask=changed)
                 out.paste(curr_ch, mask=ImageChops.invert(changed))
                 return out
 
-            r_out = _blend(r_curr, H_R)
-            g_out = _blend(g_curr, H_G)
-            b_out = _blend(b_curr, H_B)
+            diff_img = Image.merge("RGB", (
+                _blend(r_curr, H_R),
+                _blend(g_curr, H_G),
+                _blend(b_curr, H_B),
+            ))
 
-            diff_img = Image.merge("RGB", (r_out, g_out, b_out))
-            diff_rel = _unique_filename(page_id, "_diff.png")
+            diff_rel = _unique_filename(page_id, "_diff.jpg")
             diff_abs = root / diff_rel
-            diff_img.save(str(diff_abs))
+            _save_jpeg(diff_img, diff_abs)
             logger.info("Blue-overlay diff saved: %s", diff_abs)
 
         logger.info("Diff score for page %s: %.2f%%", page_id, score)
@@ -255,16 +253,11 @@ def compute_diff(prev_rel_path: str, curr_rel_path: str, page_id: int) -> tuple[
 
 
 # ---------------------------------------------------------------------------
-# Pruning – keep only MAX_SCREENSHOTS_PER_PAGE screenshots per page
+# Pruning
 # ---------------------------------------------------------------------------
 
 def cleanup_old_screenshots(page) -> None:
-    """Delete screenshot & diff artefacts that exceed the retention limit.
-
-    Keeps the newest ``MAX_SCREENSHOTS_PER_PAGE`` checks that have a
-    screenshot_path, and removes the files (+ clears DB fields) for
-    everything older.
-    """
+    """Delete screenshot & diff artefacts that exceed the retention limit."""
     from .models import MonitoredPageCheck  # avoid circular import
 
     limit = getattr(settings, 'MAX_SCREENSHOTS_PER_PAGE', MAX_SCREENSHOTS_PER_PAGE)
@@ -287,5 +280,3 @@ def cleanup_old_screenshots(page) -> None:
         check.crop_path = ''
         check.diff_path = ''
         check.save(update_fields=['screenshot_path', 'crop_path', 'diff_path'])
-
-
