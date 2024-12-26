@@ -24,8 +24,10 @@ class MonitoredPage(models.Model):
     region_width_pct = models.FloatField(default=1.0, help_text="Monitored region width as fraction (0.0-1.0)")
     region_height_pct = models.FloatField(default=1.0, help_text="Monitored region height as fraction (0.0-1.0)")
 
+    is_pinned = models.BooleanField(default=False, help_text="Pinned sites stay at the top of the dashboard")
+
     class Meta:
-        ordering = ['-created_at']
+        ordering = ['-is_pinned', '-created_at']
 
     def __str__(self):
         return f"{self.user_id}: {self.url}"

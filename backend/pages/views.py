@@ -63,6 +63,7 @@ def monitor(request):
                 'created_at': page.created_at.isoformat(),
                 'last_screenshot_url': thumbnail_url,
                 'is_up': is_up,
+                'is_pinned': page.is_pinned,
             })
         return JsonResponse({'pages': page_list}, status=200)
 
@@ -216,6 +217,59 @@ def _check_to_dict(check, request=None):
     if check.diff_path:
         d['diff_url'] = f"/api/screenshots/{check.diff_path}"
     return d
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def monitor_site_delete(request, site_id):
+    """Delete a monitored site and all its screenshot artefacts."""
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+    try:
+        page = MonitoredPage.objects.get(pk=site_id, user=user)
+    except MonitoredPage.DoesNotExist:
+        return JsonResponse({'error': 'Site not found'}, status=404)
+
+    # Delete screenshot files from disk
+    for check in page.checks.all():
+        delete_screenshot_file(check.screenshot_path)
+        delete_screenshot_file(check.crop_path)
+        delete_screenshot_file(check.diff_path)
+        # Also remove any thumbnail
+        if check.screenshot_path:
+            from pathlib import Path
+            root = _screenshots_root()
+            src = root / check.screenshot_path
+            thumb = src.with_name(src.stem + '_thumb.jpg')
+            if thumb.is_file():
+                thumb.unlink(missing_ok=True)
+
+    page.delete()
+    return JsonResponse({'deleted': True}, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["PATCH"])
+def monitor_site_pin(request, site_id):
+    """Toggle the pinned state of a monitored site."""
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+    try:
+        page = MonitoredPage.objects.get(pk=site_id, user=user)
+    except MonitoredPage.DoesNotExist:
+        return JsonResponse({'error': 'Site not found'}, status=404)
+
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        pinned = bool(data.get('is_pinned', not page.is_pinned))
+    except (json.JSONDecodeError, KeyError):
+        pinned = not page.is_pinned
+
+    page.is_pinned = pinned
+    page.save(update_fields=['is_pinned'])
+    return JsonResponse({'id': page.id, 'is_pinned': page.is_pinned}, status=200)
 
 
 @require_http_methods(["GET"])

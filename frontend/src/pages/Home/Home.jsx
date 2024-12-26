@@ -1,8 +1,57 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from "react-router-dom"
 import Button from 'react-bootstrap/Button'
 import 'bootstrap/dist/css/bootstrap.css'
 import './Home.css'
+
+// ---- Dotted-menu component ----
+function CardMenu({ siteId, isPinned, onDelete, onPin }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handle = (action) => (e) => {
+    e.stopPropagation()   // don't navigate to the monitor page
+    setOpen(false)
+    action()
+  }
+
+  return (
+    <div className="card-menu" ref={ref}>
+      <button
+        className="card-menu-trigger"
+        title="More options"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+        aria-label="More options"
+      >
+        ···
+      </button>
+      {open && (
+        <ul className="card-menu-dropdown" role="menu">
+          <li role="menuitem">
+            <button className="card-menu-item" onClick={handle(onPin)}>
+              {isPinned ? '📌 Unpin' : '📌 Pin to top'}
+            </button>
+          </li>
+          <li role="menuitem">
+            <button className="card-menu-item card-menu-item--danger" onClick={handle(onDelete)}>
+              🗑 Delete
+            </button>
+          </li>
+        </ul>
+      )}
+    </div>
+  )
+}
 
 function Home() {
   const navigate = useNavigate()
@@ -19,24 +68,24 @@ function Home() {
     return `${base}${path}`
   }
 
-  useEffect(() => {
-    const loadMonitoredSites = async () => {
-      try {
-        const response = await fetch(buildUrl('/monitor'), { credentials: 'include' })
-        if (!response.ok) return
-        const data = await response.json()
-        setMonitoredSites((data.pages || []).map((page) => ({
-          id: page.id,
-          url: page.url,
-          last_screenshot_url: page.last_screenshot_url || '',
-          is_up: page.is_up,  // null = never checked, true = up, false = down
-        })))
-      } catch (error) {
-        if (import.meta.env.DEV) console.error('Error loading monitored sites:', error.message)
-      }
+  const loadMonitoredSites = useCallback(async () => {
+    try {
+      const response = await fetch(buildUrl('/monitor'), { credentials: 'include' })
+      if (!response.ok) return
+      const data = await response.json()
+      setMonitoredSites((data.pages || []).map((page) => ({
+        id: page.id,
+        url: page.url,
+        last_screenshot_url: page.last_screenshot_url || '',
+        is_up: page.is_up,
+        is_pinned: page.is_pinned || false,
+      })))
+    } catch (error) {
+      if (import.meta.env.DEV) console.error('Error loading monitored sites:', error.message)
     }
-    loadMonitoredSites()
   }, [server_url])
+
+  useEffect(() => { loadMonitoredSites() }, [loadMonitoredSites])
 
   const handleChange = (newValue) => {
     const isValid = validateURL(newValue)
@@ -98,8 +147,34 @@ function Home() {
     }
   }
 
-  const handleCardClick = (siteId) => {
-    navigate(`/monitor/${siteId}`)
+  const handleCardClick = (siteId) => { navigate(`/monitor/${siteId}`) }
+
+  const handleDelete = async (siteId) => {
+    if (!window.confirm('Delete this site and all its data?')) return
+    try {
+      await fetch(buildUrl(`/api/monitor/${siteId}/delete/`), {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      setMonitoredSites(prev => prev.filter(s => String(s.id) !== String(siteId)))
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('Delete failed:', err)
+    }
+  }
+
+  const handlePin = async (siteId, currentlyPinned) => {
+    try {
+      await fetch(buildUrl(`/api/monitor/${siteId}/pin/`), {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_pinned: !currentlyPinned }),
+      })
+      // Re-fetch so order updates server-side (pinned first)
+      await loadMonitoredSites()
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('Pin failed:', err)
+    }
   }
 
   const validateURL = (string) => {
@@ -148,38 +223,49 @@ function Home() {
         ) : (
           <div className="dashboard-grid">
             {monitoredSites.map((site) => (
-              <button
-                type="button"
-                key={site.id}
-                className="site-card"
-                onClick={() => handleCardClick(site.id)}
-              >
-                {site.last_screenshot_url ? (
-                  <div className="site-card-thumb-wrap">
-                    <img
-                      src={buildUrl(site.last_screenshot_url)}
-                      alt={`Screenshot of ${site.url}`}
-                      className="site-card-thumb"
-                      loading="lazy"
-                    />
+              <div key={site.id} className={`site-card-wrap${site.is_pinned ? ' site-card-wrap--pinned' : ''}`}>
+                <button
+                  type="button"
+                  className="site-card"
+                  onClick={() => handleCardClick(site.id)}
+                >
+                  {site.last_screenshot_url ? (
+                    <div className="site-card-thumb-wrap">
+                      <img
+                        src={buildUrl(site.last_screenshot_url)}
+                        alt={`Screenshot of ${site.url}`}
+                        className="site-card-thumb"
+                        loading="lazy"
+                      />
+                    </div>
+                  ) : site.is_up === false ? (
+                    <div className="site-card-thumb-placeholder site-card-thumb-placeholder--down">
+                      <span className="site-card-thumb-icon">🚫</span>
+                      <span>No image</span>
+                      <span className="site-card-thumb-sub">Site is down</span>
+                    </div>
+                  ) : (
+                    <div className="site-card-thumb-placeholder">
+                      <span className="site-card-thumb-icon">⏳</span>
+                      <span>Capturing…</span>
+                    </div>
+                  )}
+                  <div className="site-card-body">
+                    <span className="site-label">
+                      {site.is_pinned && <span className="site-pin-badge" title="Pinned">📌</span>}
+                      {site.url}
+                    </span>
+                    <span className="site-action">View monitor →</span>
                   </div>
-                ) : site.is_up === false ? (
-                  <div className="site-card-thumb-placeholder site-card-thumb-placeholder--down">
-                    <span className="site-card-thumb-icon">🚫</span>
-                    <span>No image</span>
-                    <span className="site-card-thumb-sub">Site is down</span>
-                  </div>
-                ) : (
-                  <div className="site-card-thumb-placeholder">
-                    <span className="site-card-thumb-icon">⏳</span>
-                    <span>Capturing…</span>
-                  </div>
-                )}
-                <div className="site-card-body">
-                  <span className="site-label">{site.url}</span>
-                  <span className="site-action">View monitor →</span>
-                </div>
-              </button>
+                </button>
+
+                <CardMenu
+                  siteId={site.id}
+                  isPinned={site.is_pinned}
+                  onDelete={() => handleDelete(site.id)}
+                  onPin={() => handlePin(site.id, site.is_pinned)}
+                />
+              </div>
             ))}
           </div>
         )}
