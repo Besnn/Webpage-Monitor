@@ -33,19 +33,20 @@ def monitor(request):
         pages = MonitoredPage.objects.filter(user=user).order_by('-created_at')
         page_list = []
         for page in pages:
-            last_check = page.checks.exclude(screenshot_path='').order_by('-checked_at').first()
+            # Most-recent check with a screenshot (for thumbnail)
+            last_check_with_ss = page.checks.exclude(screenshot_path='').order_by('-checked_at').first()
+            # Most-recent check of any kind (for is_up status)
+            last_check_any = page.checks.order_by('-checked_at').first()
+
             thumbnail_url = ''
-            if last_check and last_check.screenshot_path:
-                # Get or lazily generate the low-res thumbnail
-                thumb_rel = get_or_create_thumbnail(last_check.screenshot_path, page.id)
+            if last_check_with_ss and last_check_with_ss.screenshot_path:
+                thumb_rel = get_or_create_thumbnail(last_check_with_ss.screenshot_path, page.id)
                 if thumb_rel:
                     thumbnail_url = f'/api/screenshots/{thumb_rel}'
                 else:
-                    # Thumbnail generation failed — fall back to full image
-                    thumbnail_url = f'/api/screenshots/{last_check.screenshot_path}'
-            else:
-                # No screenshot at all — kick off a background capture so it
-                # shows up next time the home page is loaded
+                    thumbnail_url = f'/api/screenshots/{last_check_with_ss.screenshot_path}'
+            elif last_check_any is None or last_check_any.is_up:
+                # No screenshot yet but site appears up — trigger background capture
                 def _bg_capture(p=page):
                     try:
                         _perform_single_check(p, force_screenshot=True)
@@ -53,11 +54,15 @@ def monitor(request):
                         pass
                 threading.Thread(target=_bg_capture, daemon=True).start()
 
+            # None  = never checked, True = up, False = down
+            is_up = last_check_any.is_up if last_check_any else None
+
             page_list.append({
                 'id': page.id,
                 'url': page.url,
                 'created_at': page.created_at.isoformat(),
                 'last_screenshot_url': thumbnail_url,
+                'is_up': is_up,
             })
         return JsonResponse({'pages': page_list}, status=200)
 

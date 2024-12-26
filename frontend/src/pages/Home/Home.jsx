@@ -29,6 +29,7 @@ function Home() {
           id: page.id,
           url: page.url,
           last_screenshot_url: page.last_screenshot_url || '',
+          is_up: page.is_up,  // null = never checked, true = up, false = down
         })))
       } catch (error) {
         if (import.meta.env.DEV) console.error('Error loading monitored sites:', error.message)
@@ -162,9 +163,16 @@ function Home() {
                       loading="lazy"
                     />
                   </div>
+                ) : site.is_up === false ? (
+                  <div className="site-card-thumb-placeholder site-card-thumb-placeholder--down">
+                    <span className="site-card-thumb-icon">🚫</span>
+                    <span>No image</span>
+                    <span className="site-card-thumb-sub">Site is down</span>
+                  </div>
                 ) : (
                   <div className="site-card-thumb-placeholder">
-                    <span>No screenshot yet</span>
+                    <span className="site-card-thumb-icon">⏳</span>
+                    <span>Capturing…</span>
                   </div>
                 )}
                 <div className="site-card-body">

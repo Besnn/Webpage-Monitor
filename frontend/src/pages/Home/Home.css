@@ -151,15 +151,38 @@
     aspect-ratio: 16 / 9;
     background: linear-gradient(135deg, #e8edf5 0%, #dbe4f0 100%);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 0.25rem;
     flex-shrink: 0;
 }
 
 .site-card-thumb-placeholder span {
     font-size: 0.8rem;
     color: #94a3b8;
-    font-style: italic;
+}
+
+.site-card-thumb-placeholder--down {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+}
+
+.site-card-thumb-placeholder--down span {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #ef4444;
+    letter-spacing: -0.5px;
+}
+
+.site-card-thumb-placeholder--down .site-card-thumb-sub {
+    font-size: 1rem;
+    font-weight: 400;
+    color: #fca5a5;
+}
+
+.site-card-thumb-icon {
+    font-size: 3rem;
+    line-height: 1;
 }
 
 /* Text body below the thumbnail */
