@@ -119,10 +119,27 @@ export function AuthProvider({ children }) {
     navigate('/login')
   }
 
+  const serverUrl = import.meta.env.DEV
+    ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL
+    : import.meta.env.VITE_PRODUCTION_SERVER_URL
+
+  // Re-fetch user info from server and update local state
+  const refreshUser = async () => {
+    try {
+      const res = await fetch(`${serverUrl}/api/auth/me/`, { credentials: 'include' })
+      if (!res.ok) return
+      const data = await res.json()
+      const updated = { ...currentUser, ...data.user }
+      setCurrentUser(updated)
+      localStorage.setItem('user', JSON.stringify(updated))
+    } catch (_) {}
+  }
+
   const value = {
     currentUser,
     login,
     logout,
+    refreshUser,
     isAuthenticated: !!currentUser,
     isAdmin: currentUser?.role === 'admin',
     isSessionExpired,

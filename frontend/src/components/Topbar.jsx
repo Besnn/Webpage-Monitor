@@ -24,6 +24,10 @@ function Topbar() {
       navigate('/admin')
       return
     }
+    if (action === 'settings') {
+      navigate('/settings')
+      return
+    }
     if (action === 'monitor') {
       navigate('/monitor')
       return
@@ -54,6 +58,7 @@ function Topbar() {
             {isAdmin && (
               <button type="button" onClick={() => handleMenuAction('admin')}>Admin</button>
             )}
+            <button type="button" onClick={() => handleMenuAction('settings')}>Settings</button>
             <button type="button" onClick={() => handleMenuAction('logout')}>Logout</button>
           </div>
         )}

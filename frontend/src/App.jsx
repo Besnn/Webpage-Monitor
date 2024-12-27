@@ -10,6 +10,7 @@ import './pages/Home/Home.css'
 import Monitor from './pages/Monitor/Monitor.jsx'
 import Login from './pages/Login/Login.jsx'
 import Register from './pages/Register/Register.jsx'
+import Settings from './pages/Settings/Settings.jsx'
 import './App.css'
 
 import { AuthProvider } from './context/AuthContext'
@@ -29,6 +30,7 @@ function App() {
             <Route path='/' element={ <ProtectedRoute><Home /></ProtectedRoute> } />
             <Route path='/monitor/:siteId' element={ <ProtectedRoute><Monitor /></ProtectedRoute> } />
             <Route path='/monitor' element={ <ProtectedRoute><Monitor /></ProtectedRoute> } />
+            <Route path='/settings' element={ <ProtectedRoute><Settings /></ProtectedRoute> } />
             <Route path='/admin' element={ <AdminRoute><Admin /></AdminRoute> } />
           </Routes>
         </AuthProvider>

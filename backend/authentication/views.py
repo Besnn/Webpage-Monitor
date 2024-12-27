@@ -1,4 +1,4 @@
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout as auth_logout, update_session_auth_hash
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import User
 from django.db import connection, transaction
@@ -147,12 +147,133 @@ def me_view(request):
             'user': {
                 'id': str(user.id),
                 'email': user.email or '',
+                'username': user.username,
                 'full_name': (user.get_full_name() or '').strip(),
                 'role': role,
+                'date_joined': user.date_joined.isoformat(),
             }
         },
         status=200,
     )
+
+
+@csrf_exempt
+@require_http_methods(["PATCH"])
+def update_profile_view(request):
+    """Update username and/or email for the authenticated user."""
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    changed = []
+
+    new_username = (data.get('username') or '').strip()
+    if new_username and new_username != user.username:
+        if User.objects.filter(username__iexact=new_username).exclude(pk=user.pk).exists():
+            return JsonResponse({'error': 'Username already taken'}, status=400)
+        user.username = new_username
+        user.first_name = new_username
+        changed.append('username')
+        changed.append('first_name')
+
+    new_email = (data.get('email') or '').strip()
+    if new_email and new_email != user.email:
+        if User.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
+            return JsonResponse({'error': 'Email already in use'}, status=400)
+        user.email = new_email
+        changed.append('email')
+
+    if changed:
+        user.save(update_fields=changed)
+
+    role = 'admin' if (user.is_staff or user.is_superuser) else 'user'
+    return JsonResponse({
+        'user': {
+            'id': str(user.id),
+            'email': user.email or '',
+            'username': user.username,
+            'full_name': (user.get_full_name() or '').strip(),
+            'role': role,
+        }
+    }, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def change_password_view(request):
+    """Change password for the authenticated user."""
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    current_password = data.get('current_password') or ''
+    new_password = (data.get('new_password') or '').strip()
+
+    if not current_password or not new_password:
+        return JsonResponse({'error': 'current_password and new_password are required'}, status=400)
+
+    if len(new_password) < 8:
+        return JsonResponse({'error': 'New password must be at least 8 characters'}, status=400)
+
+    if not user.check_password(current_password):
+        return JsonResponse({'error': 'Current password is incorrect'}, status=400)
+
+    user.set_password(new_password)
+    user.save()
+    # Keep the session alive after password change
+    update_session_auth_hash(request, user)
+
+    return JsonResponse({'message': 'Password changed successfully'}, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_account_view(request):
+    """Permanently delete the authenticated user's account and all their data."""
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    password = data.get('password') or ''
+    if not password:
+        return JsonResponse({'error': 'Password is required to delete account'}, status=400)
+
+    if not user.check_password(password):
+        return JsonResponse({'error': 'Incorrect password'}, status=400)
+
+    # Delete all screenshot files for this user's pages
+    from pages.screenshots import delete_screenshot_file, _screenshots_root
+    from pathlib import Path
+    for page in MonitoredPage.objects.filter(user=user):
+        for check in page.checks.all():
+            delete_screenshot_file(check.screenshot_path)
+            delete_screenshot_file(check.crop_path)
+            delete_screenshot_file(check.diff_path)
+            if check.screenshot_path:
+                root = _screenshots_root()
+                src = root / check.screenshot_path
+                thumb = src.with_name(src.stem + '_thumb.jpg')
+                if thumb.is_file():
+                    thumb.unlink(missing_ok=True)
+
+    auth_logout(request)
+    user.delete()
+    return JsonResponse({'message': 'Account deleted'}, status=200)
 
 
 def _ensure_admin(request):
