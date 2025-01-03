@@ -271,6 +271,23 @@
     color: #fca5a5;
 }
 
+.site-card-thumb-placeholder--missing {
+    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+}
+
+.site-card-thumb-placeholder--missing span {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #7c3aed;
+    letter-spacing: -0.5px;
+}
+
+.site-card-thumb-placeholder--missing .site-card-thumb-sub {
+    font-size: 1rem;
+    font-weight: 400;
+    color: #c4b5fd;
+}
+
 .site-card-thumb-icon {
     font-size: 3rem;
     line-height: 1;

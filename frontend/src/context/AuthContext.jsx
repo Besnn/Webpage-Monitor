@@ -7,7 +7,23 @@ const AuthContext = createContext()
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000
 
 export function useAuth() {
-  return useContext(AuthContext)
+  const ctx = useContext(AuthContext)
+  if (!ctx) {
+    // During HMR module invalidation the context may briefly be undefined.
+    // Return a safe no-op fallback so consumers don't crash.
+    return {
+      currentUser: null,
+      isAuthenticated: false,
+      isAdmin: false,
+      loading: true,
+      login: async () => {},
+      logout: () => {},
+      refreshUser: async () => {},
+      isSessionExpired: () => false,
+      handleExpiredSession: () => {},
+    }
+  }
+  return ctx
 }
 
 export function AuthProvider({ children }) {
@@ -82,11 +98,10 @@ export function AuthProvider({ children }) {
   // Login function
   const login = async (username, password) => {
     try {
-      const response = await fetch(
-        import.meta.env.DEV
-          ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL + '/api/auth/login/'
-          : import.meta.env.VITE_PRODUCTION_SERVER_URL + '/api/auth/login/',
-        {
+      const baseUrl = import.meta.env.DEV
+        ? (import.meta.env.VITE_DEVELOPMENT_SERVER_URL || '')
+        : (import.meta.env.VITE_PRODUCTION_SERVER_URL || '')
+      const response = await fetch(baseUrl + '/api/auth/login/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -120,8 +135,8 @@ export function AuthProvider({ children }) {
   }
 
   const serverUrl = import.meta.env.DEV
-    ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL
-    : import.meta.env.VITE_PRODUCTION_SERVER_URL
+    ? (import.meta.env.VITE_DEVELOPMENT_SERVER_URL || '')
+    : (import.meta.env.VITE_PRODUCTION_SERVER_URL || '')
 
   // Re-fetch user info from server and update local state
   const refreshUser = async () => {

@@ -4,8 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import './Settings.css'
 
 const SERVER_URL = import.meta.env.DEV
-  ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL
-  : import.meta.env.VITE_PRODUCTION_SERVER_URL
+  ? (import.meta.env.VITE_DEVELOPMENT_SERVER_URL || '')
+  : (import.meta.env.VITE_PRODUCTION_SERVER_URL || '')
 
 const api = (path, opts = {}) =>
   fetch(`${SERVER_URL}${path}`, { credentials: 'include', ...opts })

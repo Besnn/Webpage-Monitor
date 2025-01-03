@@ -16,6 +16,24 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from backend/.env using stdlib only (no extra deps).
+# Does not override variables that are already set in the environment.
+def _load_dotenv(path):
+    try:
+        with open(path) as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if not _line or _line.startswith('#') or '=' not in _line:
+                    continue
+                _key, _, _val = _line.partition('=')
+                _key = _key.strip()
+                _val = _val.strip().strip('"').strip("'")
+                os.environ.setdefault(_key, _val)
+    except FileNotFoundError:
+        pass
+
+_load_dotenv(BASE_DIR / ".env")
+
 # Development ports and defaults
 DJANGO_DEV_SERVER_PORT = 8000
 FRONTEND_DEV_SERVER_PORT = 5173
@@ -255,4 +273,34 @@ SCREENSHOTS_DIR = BASE_DIR / "screenshots"
 
 # Maximum number of screenshots to retain per monitored page
 MAX_SCREENSHOTS_PER_PAGE = 30
+
+# ---------------------------------------------------------------------------
+# SeaweedFS S3-compatible storage
+# ---------------------------------------------------------------------------
+# Set USE_SEAWEEDFS_STORAGE=true to store screenshots in a local SeaweedFS
+# cluster instead of local disk or AWS S3.  SeaweedFS exposes an S3-compatible
+# API so this backend reuses the boto3 client under the hood, but it:
+#   • never generates pre-signed URLs (the bucket is private/internal);
+#     instead Django proxies the image through /api/screenshots/ as with
+#     local storage so the browser never talks to SeaweedFS directly.
+#   • always uses path-style addressing (required by SeaweedFS S3 gateway).
+#
+# Required env vars:
+#   SEAWEEDFS_ENDPOINT   e.g. http://localhost:8333
+#   SEAWEEDFS_BUCKET     e.g. screenshots
+#
+# Optional:
+#   SEAWEEDFS_ACCESS_KEY  (leave empty for anonymous / dev mode)
+#   SEAWEEDFS_SECRET_KEY  (leave empty for anonymous / dev mode)
+#   SEAWEEDFS_KEY_PREFIX  object-key prefix (default: "screenshots")
+#   SEAWEEDFS_REGION      region string sent to boto3 (default: "us-east-1")
+
+USE_SEAWEEDFS_STORAGE    = os.getenv("USE_SEAWEEDFS_STORAGE", "false").lower() in {"1", "true", "yes"}
+
+SEAWEEDFS_ENDPOINT       = os.getenv("SEAWEEDFS_ENDPOINT", "http://localhost:8333")
+SEAWEEDFS_BUCKET         = os.getenv("SEAWEEDFS_BUCKET", "screenshots")
+SEAWEEDFS_ACCESS_KEY     = os.getenv("SEAWEEDFS_ACCESS_KEY", "")
+SEAWEEDFS_SECRET_KEY     = os.getenv("SEAWEEDFS_SECRET_KEY", "")
+SEAWEEDFS_KEY_PREFIX     = os.getenv("SEAWEEDFS_KEY_PREFIX", "screenshots").rstrip("/")
+SEAWEEDFS_REGION         = os.getenv("SEAWEEDFS_REGION", "us-east-1")
 

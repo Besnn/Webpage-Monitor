@@ -40,12 +40,21 @@ def monitor(request):
             last_check_any = page.checks.order_by('-checked_at').first()
 
             thumbnail_url = ''
+            screenshot_missing = False
             if last_check_with_ss and last_check_with_ss.screenshot_path:
-                thumb_rel = get_or_create_thumbnail(last_check_with_ss.screenshot_path, page.id)
-                if thumb_rel:
-                    thumbnail_url = f'/api/screenshots/{thumb_rel}'
+                source_rel = last_check_with_ss.screenshot_path
+                # Only build a URL if the source file actually exists in storage.
+                # If the screenshots directory is missing or the file was deleted,
+                # set screenshot_missing so the frontend shows "no image" instead
+                # of "capturing…".
+                if _storage.exists(source_rel):
+                    thumb_rel = get_or_create_thumbnail(source_rel, page.id)
+                    if thumb_rel:
+                        thumbnail_url = f'/api/screenshots/{thumb_rel}'
+                    else:
+                        thumbnail_url = f'/api/screenshots/{source_rel}'
                 else:
-                    thumbnail_url = f'/api/screenshots/{last_check_with_ss.screenshot_path}'
+                    screenshot_missing = True
             elif last_check_any is None or last_check_any.is_up:
                 # No screenshot yet but site appears up — trigger background capture
                 def _bg_capture(p=page):
@@ -65,6 +74,7 @@ def monitor(request):
                 'last_screenshot_url': thumbnail_url,
                 'is_up': is_up,
                 'is_pinned': page.is_pinned,
+                'screenshot_missing': screenshot_missing,
             })
         return JsonResponse({'pages': page_list}, status=200)
 
@@ -213,9 +223,9 @@ def _check_to_dict(check, request=None):
         'diff_url': '',
         'diff_score': check.diff_score,
     }
-    if check.screenshot_path:
+    if check.screenshot_path and _storage.exists(check.screenshot_path):
         d['screenshot_url'] = f"/api/screenshots/{check.screenshot_path}"
-    if check.diff_path:
+    if check.diff_path and _storage.exists(check.diff_path):
         d['diff_url'] = f"/api/screenshots/{check.diff_path}"
     return d
 
@@ -300,9 +310,9 @@ def monitor_site_detail(request, site_id):
         'last_diff_score': None,
     }
     if latest_check:
-        if latest_check.screenshot_path:
+        if latest_check.screenshot_path and _storage.exists(latest_check.screenshot_path):
             summary['last_screenshot_url'] = f"/api/screenshots/{latest_check.screenshot_path}"
-        if latest_check.diff_path:
+        if latest_check.diff_path and _storage.exists(latest_check.diff_path):
             summary['last_diff_url'] = f"/api/screenshots/{latest_check.diff_path}"
         summary['last_diff_score'] = latest_check.diff_score
 
@@ -470,9 +480,11 @@ def monitor_site_settings(request, site_id):
 def serve_screenshot(request, path):
     """Serve a screenshot artefact.
 
-    - Local storage: streams the file directly.
-    - S3 storage: returns a 302 redirect to a short-lived pre-signed URL so the
-      browser fetches the image directly from S3 without proxying through Django.
+    - Local storage   : streams the file directly from disk.
+    - SeaweedFS storage: streams the object from SeaweedFS through Django
+      (the browser never contacts SeaweedFS directly).
+    - S3 storage      : returns a 302 redirect to a short-lived pre-signed URL
+      so the browser fetches the image directly from S3.
 
     Access control: the requesting user must own the page the screenshot belongs
     to (page_id is the first component of the path).
@@ -501,14 +513,24 @@ def serve_screenshot(request, path):
     if not _storage.exists(rel):
         raise Http404
 
-    # S3: redirect to a pre-signed URL
+    content_type = 'image/jpeg' if rel.lower().endswith('.jpg') else 'image/png'
+
+    # S3: redirect to a pre-signed URL (browser fetches directly from S3)
     if getattr(settings, 'USE_S3_STORAGE', False):
         presigned = _storage.url(rel)
         if not presigned:
             raise Http404
         return HttpResponseRedirect(presigned)
 
-    # Local: stream the file
+    # SeaweedFS: stream the object through Django via storage.open()
+    if getattr(settings, 'USE_SEAWEEDFS_STORAGE', False):
+        try:
+            body = _storage.open(rel)
+            return HttpResponse(body.read(), content_type=content_type)
+        except Exception:
+            raise Http404
+
+    # Local disk: stream directly from the filesystem
     local_path = _storage.local_path(rel)
     if local_path is None or not local_path.is_file():
         raise Http404

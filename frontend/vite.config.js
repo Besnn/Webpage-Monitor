@@ -9,7 +9,20 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000', // Points to Django
         changeOrigin: true,
         secure: false,
-      }
+      },
+      // Match only the exact /monitor path (list + create endpoint).
+      // /monitor/12, /monitor/anything etc. are React frontend routes
+      // and must NOT be proxied to Django.
+      '^/monitor/?$': {
+        target: 'http://127.0.0.1:8000', // Points to Django
+        changeOrigin: true,
+        secure: false,
+      },
+      '/media': {
+        target: 'http://127.0.0.1:8000', // Points to Django
+        changeOrigin: true,
+        secure: false,
+      },
     }
   }
 })
