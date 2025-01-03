@@ -4,8 +4,8 @@ import { Container, Row, Col, Table, Badge, Button, Spinner, Alert, Modal, Form 
 import './Monitor.css'
 
 const API_BASE_URL = import.meta.env.DEV
-  ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL
-  : import.meta.env.VITE_PRODUCTION_SERVER_URL
+  ? (import.meta.env.VITE_DEVELOPMENT_SERVER_URL || '')
+  : (import.meta.env.VITE_PRODUCTION_SERVER_URL || '')
 
 const normalizeBaseUrl = (baseUrl) => {
   if (!baseUrl) return ''
@@ -13,8 +13,9 @@ const normalizeBaseUrl = (baseUrl) => {
 }
 
 const buildApiUrl = (path) => {
-  const normalizedBase = normalizeBaseUrl(API_BASE_URL) || window.location.origin
-  return `${normalizedBase}${path.startsWith('/') ? path : `/${path}`}`
+  const normalizedBase = normalizeBaseUrl(API_BASE_URL)
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${normalizedBase}${normalizedPath}`
 }
 
 const fetchJson = async (url, options = {}) => {

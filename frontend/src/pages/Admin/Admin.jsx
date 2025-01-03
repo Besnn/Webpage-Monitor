@@ -3,8 +3,8 @@ import { Container, Card, Form, Button, Row, Col, ListGroup, Spinner, Alert, Tab
 import './Admin.css'
 
 const API_BASE_URL = import.meta.env.DEV
-  ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL
-  : import.meta.env.VITE_PRODUCTION_SERVER_URL
+  ? (import.meta.env.VITE_DEVELOPMENT_SERVER_URL || '')
+  : (import.meta.env.VITE_PRODUCTION_SERVER_URL || '')
 
 const normalizeBaseUrl = (baseUrl) => {
   if (!baseUrl) return ''
@@ -12,7 +12,7 @@ const normalizeBaseUrl = (baseUrl) => {
 }
 
 const buildApiUrl = (path) => {
-  const normalizedBase = normalizeBaseUrl(API_BASE_URL) || window.location.origin
+  const normalizedBase = normalizeBaseUrl(API_BASE_URL)
   return `${normalizedBase}${path.startsWith('/') ? path : `/${path}`}`
 }
 

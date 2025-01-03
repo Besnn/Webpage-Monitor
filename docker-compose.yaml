@@ -27,8 +27,80 @@ services:
         aliases:
           - mocksite.local
 
+  # ---------------------------------------------------------------------------
+  # SeaweedFS — S3-compatible distributed object storage
+  #
+  # Four-container setup:
+  #   seaweedfs-master  – coordinates topology                  (port 9333)
+  #   seaweedfs-volume  – stores the actual data blobs          (port 8889)
+  #   seaweedfs-filer   – metadata layer on top of volume       (port 8888)
+  #   seaweedfs-s3      – S3-compatible gateway backed by filer (port 8333)
+  #
+  # Access the S3 API at http://localhost:8333
+  # Leave SEAWEEDFS_ACCESS_KEY/SECRET_KEY empty for anonymous dev access.
+  # ---------------------------------------------------------------------------
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs_master
+    command: master -ip=seaweedfs-master -ip.bind=0.0.0.0 -volumeSizeLimitMB=2048
+    ports:
+      - "9333:9333"    # master HTTP API
+      - "19333:19333"  # master gRPC
+    volumes:
+      - seaweedfs_master_data:/data
+    networks:
+      - default
+    restart: unless-stopped
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs_volume
+    command: volume -mserver=seaweedfs-master:9333 -ip.bind=0.0.0.0 -port=8080 -dir=/data
+    ports:
+      - "8889:8080"    # volume HTTP (8889 on host to avoid conflicts)
+    volumes:
+      - seaweedfs_volume_data:/data
+    depends_on:
+      - seaweedfs-master
+    networks:
+      - default
+    restart: unless-stopped
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs_filer
+    command: filer -master=seaweedfs-master:9333 -ip.bind=0.0.0.0
+    ports:
+      - "8888:8888"    # filer HTTP API
+      - "18888:18888"  # filer gRPC
+    volumes:
+      - seaweedfs_filer_data:/data
+    depends_on:
+      - seaweedfs-master
+      - seaweedfs-volume
+    networks:
+      - default
+    restart: unless-stopped
+
+  seaweedfs-s3:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs_s3
+    command: s3 -filer=seaweedfs-filer:8888 -ip.bind=0.0.0.0 -port=8333 -config=/etc/seaweedfs/s3.config.json
+    ports:
+      - "8333:8333"    # S3-compatible API
+    volumes:
+      - ./docker/seaweedfs/s3.config.json:/etc/seaweedfs/s3.config.json:ro
+    depends_on:
+      - seaweedfs-filer
+    networks:
+      - default
+    restart: unless-stopped
+
 volumes:
   pg_data:
+  seaweedfs_master_data:
+  seaweedfs_volume_data:
+  seaweedfs_filer_data:
 
 networks:
   default:

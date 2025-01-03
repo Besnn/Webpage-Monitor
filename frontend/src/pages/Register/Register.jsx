@@ -60,8 +60,8 @@ function Register() {
       // Call backend API for registration
       const response = await fetch(
         import.meta.env.DEV
-          ? import.meta.env.VITE_DEVELOPMENT_SERVER_URL + '/api/auth/register/'
-          : import.meta.env.VITE_PRODUCTION_SERVER_URL + '/api/auth/register/',
+          ? (import.meta.env.VITE_DEVELOPMENT_SERVER_URL || '') + '/api/auth/register/'
+          : (import.meta.env.VITE_PRODUCTION_SERVER_URL || '') + '/api/auth/register/',
         {
           method: 'POST',
           headers: {

@@ -57,15 +57,15 @@ function Home() {
   const navigate = useNavigate()
 
   const [server_url,] = useState(import.meta.env.DEV ?
-    import.meta.env.VITE_DEVELOPMENT_SERVER_URL : import.meta.env.VITE_PRODUCTION_SERVER_URL)
+    (import.meta.env.VITE_DEVELOPMENT_SERVER_URL || '') : (import.meta.env.VITE_PRODUCTION_SERVER_URL || ''))
   const [isValidHttpURL, setIsValidHttpURL] = useState(false)
   const [urlText, setURLText] = useState('')
   const [buttonText, setButtonText] = useState('Enter valid URL')
   const [monitoredSites, setMonitoredSites] = useState([])
 
   const buildUrl = (path) => {
-    const base = (server_url || window.location.origin).replace(/\/$/, '')
-    return `${base}${path}`
+    if (!server_url) return path
+    return `${server_url.replace(/\/$/, '')}${path}`
   }
 
   const loadMonitoredSites = useCallback(async () => {
@@ -79,6 +79,7 @@ function Home() {
         last_screenshot_url: page.last_screenshot_url || '',
         is_up: page.is_up,
         is_pinned: page.is_pinned || false,
+        screenshot_missing: page.screenshot_missing || false,
       })))
     } catch (error) {
       if (import.meta.env.DEV) console.error('Error loading monitored sites:', error.message)
@@ -111,7 +112,7 @@ function Home() {
       /*
       create response with url in body and send it to server at api endpoint monitor
       */
-      const response = await fetch(server_url + '/monitor', {  // server_url is the URL of the server to send the request to
+      const response = await fetch(buildUrl('/monitor'), {  // server_url is the URL of the server to send the request to
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -243,6 +244,12 @@ function Home() {
                       <span className="site-card-thumb-icon">🚫</span>
                       <span>No image</span>
                       <span className="site-card-thumb-sub">Site is down</span>
+                    </div>
+                  ) : site.screenshot_missing ? (
+                    <div className="site-card-thumb-placeholder site-card-thumb-placeholder--missing">
+                      <span className="site-card-thumb-icon">🖼️</span>
+                      <span>No image</span>
+                      <span className="site-card-thumb-sub">Screenshot unavailable</span>
                     </div>
                   ) : (
                     <div className="site-card-thumb-placeholder">
