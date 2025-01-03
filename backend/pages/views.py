@@ -14,7 +14,8 @@ import urllib.error
 
 from .models import MonitoredPage, MonitoredPageCheck
 from .notifications import handle_post_check_notification, handle_change_notification
-from .screenshots import capture_screenshot, compute_diff, _screenshots_root, delete_screenshot_file, cleanup_old_screenshots, get_or_create_thumbnail, create_thumbnail
+from .screenshots import capture_screenshot, compute_diff, _screenshots_root, delete_screenshot_file, cleanup_old_screenshots, get_or_create_thumbnail, create_thumbnail, _thumb_rel
+from .storage import screenshot_storage as _storage
 
 # Create your views here.
 
@@ -231,19 +232,13 @@ def monitor_site_delete(request, site_id):
     except MonitoredPage.DoesNotExist:
         return JsonResponse({'error': 'Site not found'}, status=404)
 
-    # Delete screenshot files from disk
+    # Delete all screenshot artefacts (full, crop, diff, thumbnail) from storage
     for check in page.checks.all():
         delete_screenshot_file(check.screenshot_path)
         delete_screenshot_file(check.crop_path)
         delete_screenshot_file(check.diff_path)
-        # Also remove any thumbnail
         if check.screenshot_path:
-            from pathlib import Path
-            root = _screenshots_root()
-            src = root / check.screenshot_path
-            thumb = src.with_name(src.stem + '_thumb.jpg')
-            if thumb.is_file():
-                thumb.unlink(missing_ok=True)
+            delete_screenshot_file(_thumb_rel(check.screenshot_path))
 
     page.delete()
     return JsonResponse({'deleted': True}, status=200)
@@ -473,22 +468,26 @@ def monitor_site_settings(request, site_id):
 
 @require_http_methods(["GET"])
 def serve_screenshot(request, path):
-    """Serve a screenshot artefact from SCREENSHOTS_DIR.
+    """Serve a screenshot artefact.
 
-    Access control: user must be authenticated and own the page the screenshot
-    belongs to.  For simplicity we resolve the page_id from the first path
-    component (``<page_id>/<filename>.png``).
+    - Local storage: streams the file directly.
+    - S3 storage: returns a 302 redirect to a short-lived pre-signed URL so the
+      browser fetches the image directly from S3 without proxying through Django.
+
+    Access control: the requesting user must own the page the screenshot belongs
+    to (page_id is the first component of the path).
     """
+    from django.http import HttpResponseRedirect
+    from .storage import screenshot_storage as _storage
+
     user = getattr(request, 'user', None)
     if user is None or not user.is_authenticated:
         return JsonResponse({'error': 'Not authenticated'}, status=401)
 
-    # Basic path-traversal guard
     safe = Path(path)
     if '..' in safe.parts:
         raise Http404
 
-    # Verify ownership: first component of path is the page id
     try:
         page_id = int(safe.parts[0])
     except (IndexError, ValueError):
@@ -497,9 +496,23 @@ def serve_screenshot(request, path):
     if not MonitoredPage.objects.filter(pk=page_id, user=user).exists():
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
-    abs_path = _screenshots_root() / safe
-    if not abs_path.is_file():
+    rel = str(safe)
+
+    if not _storage.exists(rel):
         raise Http404
 
-    return FileResponse(open(abs_path, 'rb'), content_type='image/png')
+    # S3: redirect to a pre-signed URL
+    if getattr(settings, 'USE_S3_STORAGE', False):
+        presigned = _storage.url(rel)
+        if not presigned:
+            raise Http404
+        return HttpResponseRedirect(presigned)
+
+    # Local: stream the file
+    local_path = _storage.local_path(rel)
+    if local_path is None or not local_path.is_file():
+        raise Http404
+
+    content_type = 'image/jpeg' if rel.lower().endswith('.jpg') else 'image/png'
+    return FileResponse(open(local_path, 'rb'), content_type=content_type)
 

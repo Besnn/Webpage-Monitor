@@ -256,20 +256,15 @@ def delete_account_view(request):
     if not user.check_password(password):
         return JsonResponse({'error': 'Incorrect password'}, status=400)
 
-    # Delete all screenshot files for this user's pages
-    from pages.screenshots import delete_screenshot_file, _screenshots_root
-    from pathlib import Path
+    # Delete all screenshot artefacts for this user's pages via storage abstraction
+    from pages.screenshots import delete_screenshot_file, _thumb_rel
     for page in MonitoredPage.objects.filter(user=user):
         for check in page.checks.all():
             delete_screenshot_file(check.screenshot_path)
             delete_screenshot_file(check.crop_path)
             delete_screenshot_file(check.diff_path)
             if check.screenshot_path:
-                root = _screenshots_root()
-                src = root / check.screenshot_path
-                thumb = src.with_name(src.stem + '_thumb.jpg')
-                if thumb.is_file():
-                    thumb.unlink(missing_ok=True)
+                delete_screenshot_file(_thumb_rel(check.screenshot_path))
 
     auth_logout(request)
     user.delete()

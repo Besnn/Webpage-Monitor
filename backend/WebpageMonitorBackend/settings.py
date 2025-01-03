@@ -149,11 +149,6 @@ STATIC_URL = "static/"
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
 
-# Screenshot artefacts directory (stored on local disk)
-SCREENSHOTS_DIR = BASE_DIR / "screenshots"
-
-# Maximum number of screenshots to retain per monitored page
-MAX_SCREENSHOTS_PER_PAGE = 30
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
@@ -223,3 +218,41 @@ SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 
 # Base URL used in notification emails to build absolute links to screenshots
 SITE_BASE_URL = os.getenv("SITE_BASE_URL", f"http://localhost:{DJANGO_DEV_SERVER_PORT}")
+
+# ---------------------------------------------------------------------------
+# Screenshot storage — local disk (default) or S3
+# ---------------------------------------------------------------------------
+# Set USE_S3_STORAGE=true (env var) to store screenshots in an S3 bucket
+# instead of the local filesystem.  All other S3_* variables are required
+# when S3 is enabled.
+#
+# Required env vars when USE_S3_STORAGE=true:
+#   S3_BUCKET_NAME        e.g. my-webmon-screenshots
+#   S3_REGION_NAME        e.g. eu-west-1
+#   AWS_ACCESS_KEY_ID     IAM key id
+#   AWS_SECRET_ACCESS_KEY IAM secret
+#
+# Optional:
+#   S3_ENDPOINT_URL       custom endpoint (MinIO, LocalStack, etc.)
+#   S3_PRESIGN_EXPIRY     seconds for pre-signed GET URLs (default: 3600)
+#   S3_KEY_PREFIX         object key prefix, e.g. "screenshots" (default: "screenshots")
+#   S3_USE_PATH_STYLE     "true" for path-style URLs (needed for MinIO)
+
+USE_S3_STORAGE        = os.getenv("USE_S3_STORAGE", "false").lower() in {"1", "true", "yes"}
+
+S3_BUCKET_NAME        = os.getenv("S3_BUCKET_NAME", "")
+S3_REGION_NAME        = os.getenv("S3_REGION_NAME", "us-east-1")
+S3_ENDPOINT_URL       = os.getenv("S3_ENDPOINT_URL", "")         # blank = AWS
+S3_PRESIGN_EXPIRY     = int(os.getenv("S3_PRESIGN_EXPIRY", "3600"))
+S3_KEY_PREFIX         = os.getenv("S3_KEY_PREFIX", "screenshots").rstrip("/")
+S3_USE_PATH_STYLE     = os.getenv("S3_USE_PATH_STYLE", "false").lower() in {"1", "true", "yes"}
+
+AWS_ACCESS_KEY_ID     = os.getenv("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+
+# Screenshot artefacts directory (used only when USE_S3_STORAGE=false)
+SCREENSHOTS_DIR = BASE_DIR / "screenshots"
+
+# Maximum number of screenshots to retain per monitored page
+MAX_SCREENSHOTS_PER_PAGE = 30
+
