@@ -43,15 +43,15 @@ SMTP_DEFAULT_DEV_PORT = "25"
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# FIXME: add key logic
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-y!b1$Z3#^-#v@d_q&j*z&b^p@b*t*c*w*x*y*z*a*b*c*d*e*f"
+SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-y!b1$Z3#^-#v@d_q&j*z&b^p@b*t*c*w*x*y*z*a*b*c*d*e*f")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "true").lower() in {"1", "true", "yes"}
 
-# Allow local development hosts.
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+# Allow local development hosts and Docker service names.
+_extra_hosts = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "backend"] + _extra_hosts
 
 
 # Application definition
@@ -86,7 +86,13 @@ CORS_ALLOWED_ORIGINS = [
     f"http://127.0.0.1:{DJANGO_DEV_SERVER_PORT}",
     f"http://localhost:{FRONTEND_DEV_SERVER_PORT}",  # Vite dev server
     f"http://127.0.0.1:{FRONTEND_DEV_SERVER_PORT}",
+    "http://localhost:3000",   # Docker frontend
+    "http://127.0.0.1:3000",
 ]
+
+# Additional origins from env var (comma-separated), e.g. for production domain
+_extra_origins = [o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]
+CORS_ALLOWED_ORIGINS += _extra_origins
 
 # Allow cookies/authorization headers to be included in cross-site requests.
 CORS_ALLOW_CREDENTIALS = True
@@ -118,11 +124,11 @@ WSGI_APPLICATION = "WebpageMonitorBackend.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "webpage_monitor",
-        "USER": "postgres",
-        "PASSWORD": "TMP_PASSWORD_",
-        "HOST": "localhost",
-        "PORT": POSTGRES_DEFAULT_PORT,
+        "NAME": os.getenv("POSTGRES_DB", "webpage_monitor"),
+        "USER": os.getenv("POSTGRES_USER", "postgres"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "TMP_PASSWORD_"),
+        "HOST": os.getenv("POSTGRES_HOST", "localhost"),
+        "PORT": os.getenv("POSTGRES_PORT", POSTGRES_DEFAULT_PORT),
     }
 }
 
@@ -162,6 +168,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media files (user-uploaded / generated artefacts)
 MEDIA_ROOT = BASE_DIR / "media"

@@ -3,14 +3,72 @@ services:
     image: postgres:15
     container_name: postgres_docker
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: TMP_PASSWORD_
-      POSTGRES_DB: webpage_monitor
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-TMP_PASSWORD_}
+      POSTGRES_DB: ${POSTGRES_DB:-webpage_monitor}
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./db/db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
+  # ---------------------------------------------------------------------------
+  # Django backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build: ./backend
+    container_name: backend
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-django-insecure-change-me-in-production}
+      DEBUG: ${DEBUG:-false}
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-webpage_monitor}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-TMP_PASSWORD_}
+      USE_SEAWEEDFS_STORAGE: ${USE_SEAWEEDFS_STORAGE:-true}
+      SEAWEEDFS_ENDPOINT: http://seaweedfs-s3:8333
+      SEAWEEDFS_BUCKET: ${SEAWEEDFS_BUCKET:-screenshots}
+      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY:-}
+      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
+      CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-}
+      EMAIL_HOST: host.docker.internal
+      EMAIL_PORT: "25"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      seaweedfs-s3:
+        condition: service_started
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn WebpageMonitorBackend.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120"
+    networks:
+      - default
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # React frontend — built by Node, served by nginx, proxies /api to backend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - default
+    restart: unless-stopped
 
   mocksite:
     image: nginx:alpine

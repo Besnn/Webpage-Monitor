@@ -88,6 +88,15 @@ function Home() {
 
   useEffect(() => { loadMonitoredSites() }, [loadMonitoredSites])
 
+  // Re-fetch when the user navigates back to this tab / page
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadMonitoredSites()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [loadMonitoredSites])
+
   const handleChange = (newValue) => {
     const isValid = validateURL(newValue)
     setURLText(newValue)
@@ -129,10 +138,9 @@ function Home() {
         const data = await response.json()
         const page = data.page
         if (page) {
-          setMonitoredSites((prev) => {
-            if (prev.some((site) => String(site.id) === String(page.id))) return prev
-            return [...prev, { id: page.id, url: page.url }]
-          })
+          // Re-fetch the full site list so the new card appears with all
+          // fields (thumbnail, status, pinned state, etc.)
+          await loadMonitoredSites()
           setURLText('')
           setIsValidHttpURL(false)
           setButtonText('Enter valid URL')

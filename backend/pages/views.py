@@ -56,10 +56,13 @@ def monitor(request):
                 else:
                     screenshot_missing = True
             elif last_check_any is None or last_check_any.is_up:
-                # No screenshot yet but site appears up — trigger background capture
+                # No screenshot yet but site appears up — trigger background capture.
+                # Use notify=False so this thumbnail-only capture does not send
+                # duplicate notification emails (the periodic run_checks command
+                # handles notifications).
                 def _bg_capture(p=page):
                     try:
-                        _perform_single_check(p, force_screenshot=True)
+                        _perform_single_check(p, force_screenshot=True, notify=False)
                     except Exception:
                         pass
                 threading.Thread(target=_bg_capture, daemon=True).start()
@@ -106,11 +109,15 @@ def monitor(request):
         return JsonResponse({'error': 'Invalid JSON format'}, status=400)
 
 
-def _perform_single_check(page, timeout_seconds: int = 10, force_screenshot: bool = False) -> None:
+def _perform_single_check(page, timeout_seconds: int = 10, force_screenshot: bool = False, notify: bool = True) -> None:
     """Perform a single HTTP check for the given MonitoredPage and store the result.
 
     When *force_screenshot* is True a screenshot is captured even if
     ``page.screenshot_enabled`` is False (used for the initial thumbnail on add).
+
+    When *notify* is False the post-check and visual-change notification
+    handlers are skipped (used when the check is only meant to produce a
+    thumbnail for the UI, not to alert the user).
     """
     started_at = time.perf_counter()
     status_code = None
@@ -194,16 +201,17 @@ def _perform_single_check(page, timeout_seconds: int = 10, force_screenshot: boo
             pass
 
     # Fire notification logic (do not let it raise)
-    try:
-        handle_post_check_notification(page, latest)
-    except Exception:
-        pass
+    if notify:
+        try:
+            handle_post_check_notification(page, latest)
+        except Exception:
+            pass
 
-    # Fire visual-change notification (do not let it raise)
-    try:
-        handle_change_notification(page, latest)
-    except Exception:
-        pass
+        # Fire visual-change notification (do not let it raise)
+        try:
+            handle_change_notification(page, latest)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
